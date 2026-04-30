@@ -1,0 +1,28 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	state_loader(state_loader)
+	listing_fetcher(listing_fetcher)
+	matcher(matcher)
+	Ranker(Ranker)
+	presenter(presenter)
+	feedback_receiver(feedback_receiver)
+	preference_updater(preference_updater)
+	state_saver(state_saver)
+	__end__([<p>__end__</p>]):::last
+	Ranker --> presenter;
+	__start__ --> state_loader;
+	feedback_receiver --> preference_updater;
+	listing_fetcher --> matcher;
+	matcher --> Ranker;
+	preference_updater --> state_saver;
+	presenter --> feedback_receiver;
+	state_loader --> listing_fetcher;
+	state_saver --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
