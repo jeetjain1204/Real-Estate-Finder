@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, StateGraph
 
-from realestate_finder.models import BuyerPreferenceState
+from realestate_finder.models import BuyerPreferenceState, json_safe_state
 from realestate_finder.nodes import (
     feedback_receiver,
     listing_fetcher,
@@ -36,15 +36,27 @@ def build_graph():
     builder.add_node("state_saver", state_saver)
 
     builder.set_entry_point("state_loader")
-    builder.add_edge("state_loader", "listing_fetcher")
+    builder.add_conditional_edges(
+        "state_loader",
+        _route_after_load,
+        {
+            "recommend": "listing_fetcher",
+            "feedback": "feedback_receiver",
+        },
+    )
     builder.add_edge("listing_fetcher", "matcher")
     builder.add_edge("matcher", "Ranker")
     builder.add_edge("Ranker", "presenter")
-    builder.add_edge("presenter", "feedback_receiver")
+    builder.add_edge("presenter", "state_saver")
     builder.add_edge("feedback_receiver", "preference_updater")
     builder.add_edge("preference_updater", "state_saver")
     builder.add_edge("state_saver", END)
     return builder
+
+
+def _route_after_load(state: BuyerPreferenceState | dict) -> str:
+    current = BuyerPreferenceState.model_validate(state)
+    return current.graph_action
 
 
 def checkpoint_path() -> Path:
@@ -78,7 +90,7 @@ def load_checkpoint_state(graph, buyer_id: str) -> BuyerPreferenceState:
 def run_recommendation_session(graph, buyer_id: str, state: BuyerPreferenceState | None = None) -> BuyerPreferenceState:
     current = state or load_checkpoint_state(graph, buyer_id)
     current.graph_action = "recommend"
-    result = graph.invoke(current.model_dump(mode="python"), config=thread_config(buyer_id))
+    result = graph.invoke(json_safe_state(current), config=thread_config(buyer_id))
     return BuyerPreferenceState.model_validate(result)
 
 
@@ -86,8 +98,13 @@ def save_feedback(graph, buyer_id: str, feedback) -> BuyerPreferenceState:
     current = load_checkpoint_state(graph, buyer_id)
     current.graph_action = "feedback"
     current.incoming_feedback = feedback
-    result = graph.invoke(current.model_dump(mode="python"), config=thread_config(buyer_id))
+    result = graph.invoke(json_safe_state(current), config=thread_config(buyer_id))
     return BuyerPreferenceState.model_validate(result)
+
+
+def update_buyer_state(graph, buyer_id: str, state: BuyerPreferenceState) -> BuyerPreferenceState:
+    graph.update_state(thread_config(buyer_id), json_safe_state(state))
+    return load_checkpoint_state(graph, buyer_id)
 
 
 def reset_buyer_checkpoint(buyer_id: str, db_path: str | Path | None = None) -> None:

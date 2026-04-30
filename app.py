@@ -12,6 +12,7 @@ from realestate_finder.graph import (
     reset_buyer_checkpoint,
     run_recommendation_session,
     save_feedback,
+    update_buyer_state,
 )
 from realestate_finder.models import FeedbackEvent, PREFERENCE_DIMENSIONS
 from realestate_finder.ui_helpers import (
@@ -250,6 +251,8 @@ left, right = st.columns([1.75, 1], gap="large")
 
 with right:
     st.subheader("Memory")
+    if state.learning_error:
+        st.warning(state.learning_error)
     max_weight = max(state.preference_weights.values()) if state.preference_weights else 1.0
     for dimension in PREFERENCE_DIMENSIONS:
         value = state.preference_weights.get(dimension, 1.0)
@@ -260,6 +263,23 @@ with right:
         st.bar_chart(drift_df.set_index("Dimension")["Change"])
         st.dataframe(drift_df, hide_index=True, use_container_width=True)
 
+    with st.expander("KPIs", expanded=False):
+        st.write(f"Preference inference accuracy: **{state.kpis.preference_inference_accuracy if state.kpis.preference_inference_accuracy is not None else 'Not scored'}**")
+        st.write(f"Sessions to first strong yes: **{state.kpis.sessions_to_first_strong_yes or 'Pending'}**")
+        st.write(f"Listings filtered out: **{state.kpis.listings_filtered_out_pct:.1f}%**")
+        st.write(f"Buyer engagement: **{state.kpis.buyer_engagement_sessions} sessions**")
+        stated = st.multiselect(
+            "Blind-test final priorities",
+            options=list(PREFERENCE_DIMENSIONS),
+            default=state.kpis.final_stated_preferences,
+        )
+        if st.button("Score preference inference", use_container_width=True):
+            state.kpis.final_stated_preferences = stated
+            learned = set(sorted(PREFERENCE_DIMENSIONS, key=lambda dim: state.preference_weights.get(dim, 1.0), reverse=True)[:3])
+            state.kpis.preference_inference_accuracy = round((len(learned & set(stated)) / len(stated)) * 100, 2) if stated else None
+            state = update_buyer_state(graph, buyer_id, state)
+            st.rerun()
+
     st.subheader("Profile")
     st.caption(f"{state.buyer_profile.city} | INR {state.buyer_profile.budget / 10_000_000:.2f} Cr")
     for requirement in state.buyer_profile.hard_requirements:
@@ -269,6 +289,30 @@ with right:
         st.write(f"Feedback: **{len(state.feedback_log)}**")
         if state.last_update_rationale:
             st.info(state.last_update_rationale)
+
+    with st.expander("Tour"):
+        st.write(state.tour_intent_summary or "Run a session to generate a tour-ready summary.")
+
+    with st.expander("Couple mode"):
+        enabled = st.checkbox("Blend two buyer profiles", value=state.couple_profile.enabled)
+        partner_a_light = st.slider("Buyer A light", 0.1, 3.0, state.couple_profile.partner_a_weights.get("light", state.preference_weights.get("light", 1.0)), 0.1)
+        partner_b_light = st.slider("Buyer B light", 0.1, 3.0, state.couple_profile.partner_b_weights.get("light", state.preference_weights.get("light", 1.0)), 0.1)
+        partner_a_price = st.slider("Buyer A price", 0.1, 3.0, state.couple_profile.partner_a_weights.get("price", state.preference_weights.get("price", 1.0)), 0.1)
+        partner_b_price = st.slider("Buyer B price", 0.1, 3.0, state.couple_profile.partner_b_weights.get("price", state.preference_weights.get("price", 1.0)), 0.1)
+        if st.button("Save couple profile", use_container_width=True):
+            state.couple_profile.enabled = enabled
+            state.couple_profile.partner_a_weights = {**state.preference_weights, "light": partner_a_light, "price": partner_a_price}
+            state.couple_profile.partner_b_weights = {**state.preference_weights, "light": partner_b_light, "price": partner_b_price}
+            conflicts = []
+            if abs(partner_a_light - partner_b_light) >= 0.7:
+                conflicts.append(f"light conflict: {partner_a_light:.1f} vs {partner_b_light:.1f}")
+            if abs(partner_a_price - partner_b_price) >= 0.7:
+                conflicts.append(f"price conflict: {partner_a_price:.1f} vs {partner_b_price:.1f}")
+            state.couple_profile.conflict_notes = conflicts
+            state = update_buyer_state(graph, buyer_id, state)
+            st.rerun()
+        for note in state.couple_profile.conflict_notes:
+            st.caption(note)
 
     with st.expander("Checkpoint"):
         st.write(f"Buyer thread id: `{buyer_id}`")
@@ -302,6 +346,10 @@ with left:
                     " ".join(f"<span class='amenity-tag'>{amenity}</span>" for amenity in listing.amenities),
                     unsafe_allow_html=True,
                 )
+                if item.fair_price_estimate:
+                    st.caption(
+                        f"Fair price estimate: INR {item.fair_price_estimate / 10_000_000:.2f} Cr. {item.fair_price_note}"
+                    )
 
                 with st.expander("Feedback"):
                     with st.form(f"feedback_{listing.listing_id}_{state.session_count}", clear_on_submit=False):

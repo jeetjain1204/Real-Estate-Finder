@@ -19,11 +19,11 @@ Required LangGraph nodes are implemented in `realestate_finder/nodes.py`:
 7. `preference_updater`
 8. `state_saver`
 
-The graph is compiled in `realestate_finder/graph.py` with `SqliteSaver`, so state survives Streamlit or Python process restarts when the same buyer thread id is reused.
+The graph is compiled in `realestate_finder/graph.py` with `SqliteSaver`, so state survives Streamlit or Python process restarts when the same buyer thread id is reused. The graph uses conditional routing: recommendation sessions go through listing fetch, matching, ranking, and presentation; feedback submissions go through feedback validation and preference updating.
 
 Architecture diagram:
 
-![RealEstateFinder graph](docs/architecture.svg)
+![RealEstateFinder graph](docs/architecture.png)
 
 Generate an updated diagram:
 
@@ -42,7 +42,7 @@ The graph state is a Pydantic v2 `BuyerPreferenceState` with the mandatory field
 - `session_count: int`
 - `last_updated: datetime`
 
-It also stores the current recommendations, formatted presentation text, and transient incoming feedback for Streamlit.
+It also stores current recommendations, transient incoming feedback, KPI metrics, couple-mode settings, tour intent text, and learning errors.
 
 ## Preference Dimensions
 
@@ -55,7 +55,34 @@ The preference model tracks six required dimensions:
 - `age`
 - `amenities`
 
-Feedback parsing uses Google AI Studio/Gemini with structured output. A bounded fallback exists only to keep local demos running when an API key is not configured; use a Gemini API key for final grading.
+Feedback parsing uses Google AI Studio/Gemini with structured output. The production feedback updater does not use keyword matching. If `GOOGLE_API_KEY` is missing or Gemini fails, feedback is saved but preference weights are not changed and the UI shows a learning error.
+
+## Hard Requirements And Data
+
+The buyer profile enforces structured hard requirements:
+
+- minimum bedrooms
+- required amenities such as covered parking
+- city
+- budget band
+
+The demo uses 30+ synthetic Bengaluru listings with a cooldown strategy, so 3+ sessions can keep showing five homes without exhausting the pool.
+
+## KPIs Tracked
+
+The app tracks the four business KPIs from the brief:
+
+- preference inference accuracy through a blind final-priority check
+- sessions to first strong yes
+- listings filtered out as a percentage of broad candidates
+- buyer engagement as sessions per buyer thread
+
+## Bonus Features Included
+
+- Explanation mode references prior feedback, for example disliked dark homes.
+- Negotiation aide estimates fair price from comparable synthetic listings.
+- Tour scheduling produces a tour-ready summary for the current top home.
+- Couple mode blends two buyer preference profiles and calls out conflicts.
 
 ## Setup
 
@@ -93,11 +120,11 @@ http://127.0.0.1:8501
 Demo flow:
 
 1. Use buyer id `demo-buyer`.
-2. Click **Run next recommendation session** for a cold start.
+2. Click **Next session** for a cold start.
 3. Give thumbs down feedback such as "too dark" or "not enough windows".
 4. Stop Streamlit.
 5. Start Streamlit again with `streamlit run app.py`.
-6. Use the same buyer id and click **Run next recommendation session**.
+6. Use the same buyer id and click **Next session**.
 7. The session counter, feedback log, seen listings, and learned weights persist from SQLite.
 
 ## Scripted 3-Session Demo
@@ -114,7 +141,7 @@ The script runs three recommendation and feedback cycles against the same SQLite
 pytest
 ```
 
-The test suite covers initial state shape, scoring behavior, ranking and seen-listing tracking, feedback-driven preference drift, and session-count updates.
+The test suite covers initial state shape, scoring behavior, ranking, seen-listing tracking, LLM-required feedback behavior, conditional graph routing, hard requirement filtering, 3+ session listing availability, history-based explanations, fair-price estimates, datetime checkpoint round-tripping, and SQLite restart persistence.
 
 ## Data Source
 
@@ -123,7 +150,7 @@ This project uses synthetic Bengaluru listings in `realestate_finder/listings.py
 ## Deliverables
 
 - Working code: included in this repository.
-- State diagram: `docs/architecture.svg`; regenerate with `scripts/draw_graph.py`.
+- State diagram: `docs/architecture.png`; regenerate with `scripts/draw_graph.py`.
 - Business memo: `docs/business_memo.md`.
 - Presentation deck outline: `docs/presentation_deck.md`; export to PDF after adding team names and screenshots.
 - Demo video: record the Streamlit flow showing session 1, app restart, session 2, and session 3 preference drift.

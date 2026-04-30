@@ -12,6 +12,8 @@ PREFERENCE_DIMENSIONS = ("price", "size", "location", "light", "age", "amenities
 class BuyerProfile(BaseModel):
     budget: int = Field(default=18_000_000, description="Maximum purchase budget in INR")
     city: str = Field(default="Bengaluru")
+    min_bedrooms: int = 2
+    required_amenities: list[str] = Field(default_factory=lambda: ["covered parking"])
     hard_requirements: list[str] = Field(
         default_factory=lambda: ["2+ bedrooms", "covered parking", "safe neighborhood"]
     )
@@ -35,6 +37,9 @@ class ListingScore(BaseModel):
     listing: Listing
     score: float
     explanation: str
+    eligibility_notes: list[str] = Field(default_factory=list)
+    fair_price_estimate: int | None = None
+    fair_price_note: str = ""
 
 
 class FeedbackEvent(BaseModel):
@@ -49,6 +54,22 @@ class PreferenceDelta(BaseModel):
         description="Preference weight adjustments for price, size, location, light, age, amenities"
     )
     rationale: str
+
+
+class KPIMetrics(BaseModel):
+    preference_inference_accuracy: float | None = None
+    sessions_to_first_strong_yes: int | None = None
+    listings_filtered_out_pct: float = 0.0
+    buyer_engagement_sessions: int = 0
+    cold_start_listing_count: int = 0
+    final_stated_preferences: list[str] = Field(default_factory=list)
+
+
+class CoupleProfile(BaseModel):
+    enabled: bool = False
+    partner_a_weights: dict[str, float] = Field(default_factory=dict)
+    partner_b_weights: dict[str, float] = Field(default_factory=dict)
+    conflict_notes: list[str] = Field(default_factory=list)
 
 
 class BuyerPreferenceState(BaseModel):
@@ -67,18 +88,26 @@ class BuyerPreferenceState(BaseModel):
     feedback_log: list[FeedbackEvent] = Field(default_factory=list)
     session_count: int = 0
     last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    loaded_from_checkpoint: bool = False
 
     current_listings: list[Listing] = Field(default_factory=list)
     ranked_listings: list[ListingScore] = Field(default_factory=list)
-    presentation_markdown: str = ""
     incoming_feedback: list[FeedbackEvent] = Field(default_factory=list)
     graph_action: Literal["recommend", "feedback"] = "recommend"
     last_update_rationale: str = ""
+    learning_error: str = ""
+    kpis: KPIMetrics = Field(default_factory=KPIMetrics)
+    couple_profile: CoupleProfile = Field(default_factory=CoupleProfile)
+    tour_intent_summary: str = ""
 
 
 def normalise_weights(weights: dict[str, float]) -> dict[str, float]:
-    cleaned = {dimension: max(0.1, min(3.0, weights.get(dimension, 1.0))) for dimension in PREFERENCE_DIMENSIONS}
-    total = sum(cleaned.values())
-    target_total = float(len(PREFERENCE_DIMENSIONS))
-    return {key: round((value / total) * target_total, 3) for key, value in cleaned.items()}
+    return {
+        dimension: round(max(0.1, min(3.0, weights.get(dimension, 1.0))), 3)
+        for dimension in PREFERENCE_DIMENSIONS
+    }
+
+
+def json_safe_state(state: BuyerPreferenceState) -> dict:
+    return state.model_dump(mode="json")
 

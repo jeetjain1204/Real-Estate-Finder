@@ -3,7 +3,7 @@ from __future__ import annotations
 from realestate_finder.models import Listing
 
 
-SYNTHETIC_LISTINGS: list[Listing] = [
+BASE_LISTINGS: list[Listing] = [
     Listing(
         listing_id="BLR-001",
         title="Sunlit corner apartment near Cubbon Park",
@@ -163,14 +163,87 @@ SYNTHETIC_LISTINGS: list[Listing] = [
 ]
 
 
-def fetch_broad_listings(city: str, budget: int, seen_listing_ids: list[str]) -> list[Listing]:
-    """Return unseen listings in the buyer's city and a broad budget band."""
+def _generated_listing_variants() -> list[Listing]:
+    neighborhoods = [
+        ("Ulsoor", 17_400_000, 0.88, 0.92),
+        ("Banashankari", 13_800_000, 0.76, 0.72),
+        ("Yelahanka", 14_600_000, 0.68, 0.84),
+        ("JP Nagar", 16_100_000, 0.82, 0.78),
+        ("Bellandur", 15_600_000, 0.62, 0.66),
+        ("Sadashivanagar", 21_200_000, 0.94, 0.9),
+        ("Kalyan Nagar", 14_900_000, 0.72, 0.8),
+        ("Basavanagudi", 16_800_000, 0.9, 0.74),
+        ("Thanisandra", 13_900_000, 0.64, 0.82),
+        ("Marathahalli", 12_900_000, 0.58, 0.62),
+        ("Domlur", 17_100_000, 0.86, 0.78),
+        ("Brookefield", 14_700_000, 0.66, 0.7),
+        ("Cooke Town", 18_300_000, 0.9, 0.88),
+        ("Vijayanagar", 13_600_000, 0.74, 0.68),
+        ("Kanakapura Road", 11_900_000, 0.52, 0.76),
+        ("Frazer Town", 17_900_000, 0.88, 0.86),
+        ("RT Nagar", 15_300_000, 0.7, 0.74),
+        ("Nagarbhavi", 12_600_000, 0.6, 0.7),
+        ("Hennur", 14_300_000, 0.64, 0.82),
+        ("Old Airport Road", 18_800_000, 0.86, 0.8),
+        ("Yeshwanthpur", 15_800_000, 0.78, 0.72),
+        ("Bannerghatta Road", 13_400_000, 0.56, 0.66),
+        ("Richmond Town", 20_400_000, 0.92, 0.88),
+        ("CV Raman Nagar", 14_800_000, 0.72, 0.76),
+    ]
+    variants: list[Listing] = []
+    for index, (neighborhood, price, location_score, light_score) in enumerate(neighborhoods, start=13):
+        bedrooms = 3 if index % 3 == 0 else 2
+        area = 1180 + (index % 6) * 95 + (120 if bedrooms == 3 else 0)
+        age = index % 12 + 1
+        amenities = ["covered parking", "security"]
+        if index % 2 == 0:
+            amenities.append("gym")
+        if index % 4 == 0:
+            amenities.append("pool")
+        if light_score >= 0.8:
+            amenities.append("balcony")
+        amenities_score = min(1.0, 0.42 + len(amenities) * 0.12)
+        variants.append(
+            Listing(
+                listing_id=f"BLR-{index:03d}",
+                title=f"{neighborhood} {bedrooms} BHK with balanced light",
+                city="Bengaluru",
+                neighborhood=neighborhood,
+                price=price,
+                bedrooms=bedrooms,
+                area_sqft=area,
+                property_age_years=age,
+                amenities=amenities,
+                description=f"{bedrooms} BHK home in {neighborhood} with covered parking and a practical family layout.",
+                feature_scores={
+                    "price": max(0.35, min(1.0, 1 - ((price - 11_000_000) / 18_000_000))),
+                    "size": max(0.45, min(1.0, area / 1800)),
+                    "location": location_score,
+                    "light": light_score,
+                    "age": max(0.35, min(1.0, 1 - age / 18)),
+                    "amenities": amenities_score,
+                },
+            )
+        )
+    return variants
+
+
+SYNTHETIC_LISTINGS: list[Listing] = [*BASE_LISTINGS, *_generated_listing_variants()]
+
+
+def fetch_broad_listings(city: str, budget: int, seen_listing_ids: list[str], cooldown: int = 10) -> list[Listing]:
+    """Return broad listing candidates, preferring homes outside the recent seen cooldown."""
     broad_budget_limit = int(budget * 1.25)
-    return [
+    city_matches = [
         listing
         for listing in SYNTHETIC_LISTINGS
         if listing.city.lower() == city.lower()
         and listing.price <= broad_budget_limit
-        and listing.listing_id not in set(seen_listing_ids)
     ]
+    if not city_matches:
+        city_matches = [listing for listing in SYNTHETIC_LISTINGS if listing.price <= broad_budget_limit]
+
+    recent_seen = set(seen_listing_ids[-cooldown:])
+    preferred = [listing for listing in city_matches if listing.listing_id not in recent_seen]
+    return preferred if len(preferred) >= 5 else city_matches
 

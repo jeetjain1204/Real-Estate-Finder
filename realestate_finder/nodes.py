@@ -20,7 +20,11 @@ from realestate_finder.models import (
 
 def state_loader(state: BuyerPreferenceState | dict) -> dict:
     state = _as_state(state)
-    return {"last_updated": datetime.now(timezone.utc)}
+    return {
+        "last_updated": datetime.now(timezone.utc),
+        "loaded_from_checkpoint": state.session_count > 0 or bool(state.feedback_log),
+        "learning_error": "",
+    }
 
 
 def listing_fetcher(state: BuyerPreferenceState | dict) -> dict:
@@ -33,16 +37,10 @@ def listing_fetcher(state: BuyerPreferenceState | dict) -> dict:
         budget=state.buyer_profile.budget,
         seen_listing_ids=state.seen_listings,
     )
-
-    if len(listings) < 5:
-        listings = [
-            listing
-            for listing in SYNTHETIC_LISTINGS
-            if listing.city.lower() == state.buyer_profile.city.lower()
-            and listing.listing_id not in state.seen_listings[-5:]
-        ]
-
-    return {"current_listings": [_dump_model(listing) for listing in listings]}
+    kpis = state.kpis.model_copy()
+    if state.session_count == 0 and not kpis.cold_start_listing_count:
+        kpis.cold_start_listing_count = len(listings)
+    return {"current_listings": [_dump_model(listing) for listing in listings], "kpis": _dump_model(kpis)}
 
 
 def matcher(state: BuyerPreferenceState | dict) -> dict:
@@ -50,16 +48,17 @@ def matcher(state: BuyerPreferenceState | dict) -> dict:
     if state.graph_action == "feedback" and state.ranked_listings:
         return {"ranked_listings": [_dump_model(item) for item in state.ranked_listings]}
 
-    ranked = [
-        ListingScore(
-            listing=listing,
-            score=_score_listing(listing, state.preference_weights),
-            explanation=_explain_match(listing, state.preference_weights),
-        )
-        for listing in state.current_listings
-    ]
-    ranked.sort(key=lambda item: item.score, reverse=True)
-    return {"ranked_listings": [_dump_model(item) for item in ranked]}
+    eligible = []
+    for listing in state.current_listings:
+        notes = _hard_requirement_notes(listing, state)
+        if not notes:
+            eligible.append(listing)
+
+    kpis = state.kpis.model_copy()
+    total = len(state.current_listings)
+    filtered = total - len(eligible)
+    kpis.listings_filtered_out_pct = round((filtered / total) * 100, 2) if total else 0.0
+    return {"current_listings": [_dump_model(listing) for listing in eligible], "kpis": _dump_model(kpis)}
 
 
 def ranker(state: BuyerPreferenceState | dict) -> dict:
@@ -67,28 +66,35 @@ def ranker(state: BuyerPreferenceState | dict) -> dict:
     if state.graph_action == "feedback":
         return {"ranked_listings": [_dump_model(item) for item in state.ranked_listings[:5]]}
 
-    top_five = state.ranked_listings[:5]
+    ranked = [
+        ListingScore(
+            listing=listing,
+            score=_score_listing(listing, state.preference_weights, state),
+            explanation=_explain_match(listing, state),
+            eligibility_notes=[],
+            fair_price_estimate=_estimate_fair_price(listing),
+            fair_price_note=_fair_price_note(listing),
+        )
+        for listing in state.current_listings
+    ]
+    ranked.sort(key=lambda item: item.score, reverse=True)
+    top_five = ranked[:5]
     updated_seen = list(dict.fromkeys([*state.seen_listings, *[item.listing.listing_id for item in top_five]]))
     return {"ranked_listings": [_dump_model(item) for item in top_five], "seen_listings": updated_seen}
 
 
 def presenter(state: BuyerPreferenceState | dict) -> dict:
     state = _as_state(state)
-    lines = [f"### Session {state.session_count + 1} Recommendations"]
-    for index, item in enumerate(state.ranked_listings[:5], start=1):
-        listing = item.listing
-        price_cr = listing.price / 10_000_000
-        lines.extend(
-            [
-                f"**{index}. {listing.title}** (`{listing.listing_id}`)",
-                f"- {listing.neighborhood} | {listing.bedrooms} BHK | {listing.area_sqft} sqft | INR {price_cr:.2f} Cr",
-                f"- Match score: {item.score:.2f}/1.00",
-                f"- Why shown: {item.explanation}",
-                f"- {listing.description}",
-                "",
-            ]
+    if not state.ranked_listings:
+        return {"tour_intent_summary": ""}
+
+    top = state.ranked_listings[0].listing
+    return {
+        "tour_intent_summary": (
+            f"Tour request: {top.title}, {top.neighborhood}, "
+            f"{top.bedrooms} BHK, INR {top.price / 10_000_000:.2f} Cr."
         )
-    return {"presentation_markdown": "\n".join(lines)}
+    }
 
 
 def feedback_receiver(state: BuyerPreferenceState | dict) -> dict:
@@ -108,21 +114,33 @@ def preference_updater(state: BuyerPreferenceState | dict) -> dict:
     if not state.incoming_feedback:
         return {"last_update_rationale": "No buyer feedback submitted in this graph turn."}
 
-    delta = _infer_preference_delta_with_llm(
-        feedback=state.incoming_feedback,
-        listings=[item.listing for item in state.ranked_listings],
-        current_weights=state.preference_weights,
-    )
+    try:
+        delta = _infer_preference_delta_with_llm(
+            feedback=state.incoming_feedback,
+            listings=[item.listing for item in state.ranked_listings],
+            current_weights=state.preference_weights,
+        )
+    except RuntimeError as exc:
+        return {
+            "feedback_log": [_dump_model(event) for event in [*state.feedback_log, *state.incoming_feedback]],
+            "incoming_feedback": [],
+            "learning_error": str(exc),
+            "last_update_rationale": "Feedback saved, but preference learning did not run.",
+        }
+
     updated_weights = dict(state.preference_weights)
     for dimension, adjustment in delta.deltas.items():
         if dimension in PREFERENCE_DIMENSIONS:
             updated_weights[dimension] = updated_weights.get(dimension, 1.0) + adjustment
+    kpis = _update_feedback_kpis(state)
 
     return {
         "preference_weights": normalise_weights(updated_weights),
         "feedback_log": [_dump_model(event) for event in [*state.feedback_log, *state.incoming_feedback]],
         "incoming_feedback": [],
         "last_update_rationale": delta.rationale,
+        "learning_error": "",
+        "kpis": _dump_model(kpis),
     }
 
 
@@ -134,6 +152,9 @@ def state_saver(state: BuyerPreferenceState | dict) -> dict:
     }
     if state.graph_action == "recommend":
         update["session_count"] = state.session_count + 1
+        kpis = state.kpis.model_copy()
+        kpis.buyer_engagement_sessions = state.session_count + 1
+        update["kpis"] = _dump_model(kpis)
     return update
 
 
@@ -147,22 +168,42 @@ def _dump_model(model) -> dict:
     return model.model_dump(mode="python") if hasattr(model, "model_dump") else model
 
 
-def _score_listing(listing: Listing, weights: dict[str, float]) -> float:
+def _hard_requirement_notes(listing: Listing, state: BuyerPreferenceState) -> list[str]:
+    notes = []
+    profile = state.buyer_profile
+    if listing.bedrooms < profile.min_bedrooms:
+        notes.append(f"below {profile.min_bedrooms} bedrooms")
+    missing_amenities = [
+        amenity for amenity in profile.required_amenities if amenity.lower() not in {item.lower() for item in listing.amenities}
+    ]
+    if missing_amenities:
+        notes.append(f"missing {', '.join(missing_amenities)}")
+    if listing.price > int(profile.budget * 1.25):
+        notes.append("outside broad budget band")
+    return notes
+
+
+def _score_listing(listing: Listing, weights: dict[str, float], state: BuyerPreferenceState | None = None) -> float:
     weighted_total = 0.0
     weight_sum = 0.0
+    effective_weights = _reconciled_weights(weights, state) if state else weights
     for dimension in PREFERENCE_DIMENSIONS:
-        weight = max(0.1, weights.get(dimension, 1.0))
+        weight = max(0.1, effective_weights.get(dimension, 1.0))
         weighted_total += weight * listing.feature_scores.get(dimension, 0.5)
         weight_sum += weight
     return round(weighted_total / weight_sum, 3)
 
 
-def _explain_match(listing: Listing, weights: dict[str, float]) -> str:
+def _explain_match(listing: Listing, state: BuyerPreferenceState) -> str:
+    weights = _reconciled_weights(state.preference_weights, state)
     strongest = sorted(PREFERENCE_DIMENSIONS, key=lambda dim: weights.get(dim, 1.0), reverse=True)[:2]
+    history = _history_reason(state.feedback_log)
     evidence = ", ".join(
         f"{dimension} {listing.feature_scores.get(dimension, 0.5):.0%}" for dimension in strongest
     )
-    return f"it best matches your current emphasis on {', '.join(strongest)} ({evidence})."
+    if history:
+        return f"Shown because {history}; this home scores strongly on {evidence}."
+    return f"Best match for current emphasis on {', '.join(strongest)} ({evidence})."
 
 
 def _infer_preference_delta_with_llm(
@@ -182,12 +223,9 @@ def _infer_preference_delta_with_llm(
             )
             return _invoke_structured_preference_parser(llm, feedback, listings, current_weights)
         except Exception as exc:
-            return _demo_fallback_delta(feedback, f"Google AI Studio parsing failed, used demo fallback: {exc}")
+            raise RuntimeError(f"Gemini preference parsing failed: {exc}") from exc
 
-    return _demo_fallback_delta(
-        feedback,
-        "GOOGLE_API_KEY is not configured, so the demo fallback estimated conservative deltas.",
-    )
+    raise RuntimeError("GOOGLE_API_KEY is not configured; feedback was saved without preference learning.")
 
 
 def _invoke_structured_preference_parser(
@@ -204,6 +242,8 @@ def _invoke_structured_preference_parser(
                     "You update real-estate buyer preference weights from feedback. "
                     "Return small deltas between -0.35 and 0.35 only for these dimensions: "
                     f"{', '.join(PREFERENCE_DIMENSIONS)}. Positive means the buyer values it more. "
+                    "If a buyer downvotes a listing because it lacks a quality, increase that quality. "
+                    "For example, 'too dark' should increase light because the buyer wants brighter homes. "
                     "Do not invent new dimensions."
                 )
             ),
@@ -235,24 +275,76 @@ def _clamp_delta(delta: PreferenceDelta) -> PreferenceDelta:
     return PreferenceDelta(deltas=clamped, rationale=delta.rationale)
 
 
-def _demo_fallback_delta(feedback: list[FeedbackEvent], rationale_prefix: str) -> PreferenceDelta:
-    deltas = {dimension: 0.0 for dimension in PREFERENCE_DIMENSIONS}
-    for event in feedback:
-        polarity = 1.0 if event.rating == "up" else -1.0
-        text = event.comment.lower()
-        if "dark" in text or "light" in text or "window" in text or "sun" in text:
-            deltas["light"] += 0.22 * (-polarity if event.rating == "down" else polarity)
-        if "small" in text or "space" in text or "sqft" in text:
-            deltas["size"] += 0.18 * (-polarity if event.rating == "down" else polarity)
-        if "far" in text or "commute" in text or "location" in text:
-            deltas["location"] += 0.18 * (-polarity if event.rating == "down" else polarity)
-        if "old" in text or "resale" in text:
-            deltas["age"] += 0.16 * (-polarity if event.rating == "down" else polarity)
-        if "expensive" in text or "budget" in text or "price" in text:
-            deltas["price"] += 0.16 * (-polarity if event.rating == "down" else polarity)
-        if "amenities" in text or "pool" in text or "gym" in text or "clubhouse" in text:
-            deltas["amenities"] += 0.14 * (polarity if event.rating == "up" else -polarity)
+def _history_reason(feedback_log: list[FeedbackEvent]) -> str:
+    if not feedback_log:
+        return ""
+    recent = feedback_log[-5:]
+    comments = " ".join(event.comment.lower() for event in recent)
+    if "dark" in comments or "light" in comments or "window" in comments:
+        return "you reacted to natural light in earlier feedback"
+    if "commute" in comments or "far" in comments or "location" in comments:
+        return "you commented on commute and location fit"
+    if "amenities" in comments or "gym" in comments or "pool" in comments:
+        return "you responded to amenities in previous homes"
+    positive = [event for event in recent if event.rating == "up"]
+    if positive:
+        return "you liked similar homes in earlier sessions"
+    return "your recent feedback shifted the preference weights"
 
-    clamped = {dimension: round(max(-0.35, min(0.35, value)), 3) for dimension, value in deltas.items()}
-    return PreferenceDelta(deltas=clamped, rationale=f"{rationale_prefix} Deltas: {clamped}")
+
+def _update_feedback_kpis(state: BuyerPreferenceState):
+    kpis = state.kpis.model_copy()
+    if kpis.sessions_to_first_strong_yes is None:
+        for event in state.incoming_feedback:
+            if event.rating == "up" and "strong yes" in event.comment.lower():
+                kpis.sessions_to_first_strong_yes = max(1, state.session_count)
+                break
+    if kpis.final_stated_preferences:
+        learned = set(sorted(PREFERENCE_DIMENSIONS, key=lambda dim: state.preference_weights.get(dim, 1.0), reverse=True)[:3])
+        stated = set(kpis.final_stated_preferences)
+        kpis.preference_inference_accuracy = round((len(learned & stated) / len(stated)) * 100, 2) if stated else None
+    return kpis
+
+
+def _estimate_fair_price(listing: Listing) -> int | None:
+    comparables = [
+        item
+        for item in SYNTHETIC_LISTINGS
+        if item.listing_id != listing.listing_id
+        and item.city == listing.city
+        and item.bedrooms == listing.bedrooms
+        and abs(item.area_sqft - listing.area_sqft) <= 250
+    ]
+    if not comparables:
+        return None
+    avg_price_per_sqft = sum(item.price / item.area_sqft for item in comparables) / len(comparables)
+    return int(avg_price_per_sqft * listing.area_sqft)
+
+
+def _fair_price_note(listing: Listing) -> str:
+    estimate = _estimate_fair_price(listing)
+    if not estimate:
+        return "Not enough comparable listings for a fair-price estimate."
+    delta_pct = ((listing.price - estimate) / estimate) * 100
+    if delta_pct > 5:
+        return f"Listed about {delta_pct:.1f}% above comparable estimate."
+    if delta_pct < -5:
+        return f"Listed about {abs(delta_pct):.1f}% below comparable estimate."
+    return "Listed close to comparable estimate."
+
+
+def _reconciled_weights(weights: dict[str, float], state: BuyerPreferenceState | None) -> dict[str, float]:
+    if not state or not state.couple_profile.enabled:
+        return weights
+    profile = state.couple_profile
+    combined = {}
+    notes = []
+    for dimension in PREFERENCE_DIMENSIONS:
+        a_weight = profile.partner_a_weights.get(dimension, weights.get(dimension, 1.0))
+        b_weight = profile.partner_b_weights.get(dimension, weights.get(dimension, 1.0))
+        combined[dimension] = round((a_weight + b_weight) / 2, 3)
+        if abs(a_weight - b_weight) >= 0.7:
+            notes.append(f"{dimension}: buyer A {a_weight:.1f}, buyer B {b_weight:.1f}")
+    state.couple_profile.conflict_notes = notes
+    return combined
 

@@ -20,8 +20,9 @@ graph TD;
 	listing_fetcher --> matcher;
 	matcher --> Ranker;
 	preference_updater --> state_saver;
-	presenter --> feedback_receiver;
-	state_loader --> listing_fetcher;
+	presenter --> state_saver;
+	state_loader -. &nbsp;feedback&nbsp; .-> feedback_receiver;
+	state_loader -. &nbsp;recommend&nbsp; .-> listing_fetcher;
 	state_saver --> __end__;
 	classDef default fill:#f2f0ff,line-height:1.2
 	classDef first fill-opacity:0
