@@ -32,19 +32,17 @@ def test_recommendation_path_returns_five_listings_for_four_sessions(tmp_path):
 
 
 def test_hard_requirements_remove_ineligible_listings():
-    state = BuyerPreferenceState(current_listings=[])
-    state.current_listings = [
-        listing.model_copy(update={"listing_id": f"copy-{index}"})
-        for index, listing in enumerate([])
-    ]
-
     from realestate_finder.listings import SYNTHETIC_LISTINGS
 
-    state.current_listings = SYNTHETIC_LISTINGS[:12]
+    state = BuyerPreferenceState(current_listings=SYNTHETIC_LISTINGS[:12])
     matched = BuyerPreferenceState.model_validate({**state.model_dump(mode="python"), **matcher(state)})
 
-    assert all(listing.bedrooms >= state.buyer_profile.min_bedrooms for listing in matched.current_listings)
-    assert all("covered parking" in [amenity.lower() for amenity in listing.amenities] for listing in matched.current_listings)
+    assert matched.ranked_listings, "matcher must produce scored listings"
+    assert all(item.listing.bedrooms >= state.buyer_profile.min_bedrooms for item in matched.ranked_listings)
+    assert all(
+        "covered parking" in [amenity.lower() for amenity in item.listing.amenities]
+        for item in matched.ranked_listings
+    )
 
 
 def test_feedback_path_does_not_increment_session_without_gemini(tmp_path, monkeypatch):

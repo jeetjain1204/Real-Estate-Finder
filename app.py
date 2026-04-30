@@ -267,7 +267,7 @@ with right:
         st.write(f"Preference inference accuracy: **{state.kpis.preference_inference_accuracy if state.kpis.preference_inference_accuracy is not None else 'Not scored'}**")
         st.write(f"Sessions to first strong yes: **{state.kpis.sessions_to_first_strong_yes or 'Pending'}**")
         st.write(f"Listings filtered out: **{state.kpis.listings_filtered_out_pct:.1f}%**")
-        st.write(f"Buyer engagement: **{state.kpis.buyer_engagement_sessions} sessions**")
+        st.write(f"Buyer engagement: **{state.kpis.buyer_engagement_sessions_per_week:.2f} sessions/week**")
         stated = st.multiselect(
             "Blind-test final priorities",
             options=list(PREFERENCE_DIMENSIONS),
@@ -293,6 +293,14 @@ with right:
 
     with st.expander("Tour"):
         st.write(state.tour_intent_summary or "Run a session to generate a tour-ready summary.")
+        if state.tour_calendar_ics:
+            st.download_button(
+                "Add tour to Google Calendar (.ics)",
+                data=state.tour_calendar_ics,
+                file_name="property_tour.ics",
+                mime="text/calendar",
+                use_container_width=True,
+            )
 
     with st.expander("Couple mode"):
         enabled = st.checkbox("Blend two buyer profiles", value=state.couple_profile.enabled)

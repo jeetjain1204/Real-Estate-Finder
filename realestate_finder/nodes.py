@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -41,55 +41,66 @@ def listing_fetcher(state: BuyerPreferenceState | dict) -> dict:
 
 
 def matcher(state: BuyerPreferenceState | dict) -> dict:
+    """Score every eligible listing against the current preference weights."""
     state = _as_state(state)
-    eligible = []
+    effective_weights, conflict_notes = _reconciled_weights(state.preference_weights, state)
+
+    scored: list[ListingScore] = []
+    filtered_count = 0
     for listing in state.current_listings:
         notes = _hard_requirement_notes(listing, state)
-        if not notes:
-            eligible.append(listing)
+        if notes:
+            filtered_count += 1
+            continue
+        scored.append(
+            ListingScore(
+                listing=listing,
+                score=_score_listing(listing, effective_weights),
+                explanation=_explain_match(listing, state, effective_weights),
+                eligibility_notes=[],
+                fair_price_estimate=_estimate_fair_price(listing),
+                fair_price_note=_fair_price_note(listing),
+            )
+        )
 
     kpis = state.kpis.model_copy()
     total = len(state.current_listings)
-    filtered = total - len(eligible)
-    kpis.listings_filtered_out_pct = round((filtered / total) * 100, 2) if total else 0.0
-    return {"current_listings": [_dump_model(listing) for listing in eligible], "kpis": _dump_model(kpis)}
+    kpis.listings_filtered_out_pct = round((filtered_count / total) * 100, 2) if total else 0.0
 
-
-def ranker(state: BuyerPreferenceState | dict) -> dict:
-    state = _as_state(state)
-    effective_weights, conflict_notes = _reconciled_weights(state.preference_weights, state)
-    ranked = [
-        ListingScore(
-            listing=listing,
-            score=_score_listing(listing, effective_weights),
-            explanation=_explain_match(listing, state, effective_weights),
-            eligibility_notes=[],
-            fair_price_estimate=_estimate_fair_price(listing),
-            fair_price_note=_fair_price_note(listing),
-        )
-        for listing in state.current_listings
-    ]
-    ranked.sort(key=lambda item: item.score, reverse=True)
-    top_five = ranked[:5]
-    updated_seen = list(dict.fromkeys([*state.seen_listings, *[item.listing.listing_id for item in top_five]]))
-    result: dict = {"ranked_listings": [_dump_model(item) for item in top_five], "seen_listings": updated_seen}
+    result: dict = {
+        "ranked_listings": [_dump_model(item) for item in scored],
+        "kpis": _dump_model(kpis),
+    }
     if conflict_notes != state.couple_profile.conflict_notes:
         updated_couple = state.couple_profile.model_copy(update={"conflict_notes": conflict_notes})
         result["couple_profile"] = _dump_model(updated_couple)
     return result
 
 
+def ranker(state: BuyerPreferenceState | dict) -> dict:
+    """Sort the scored listings and pick the top 5."""
+    state = _as_state(state)
+    sorted_listings = sorted(state.ranked_listings, key=lambda item: item.score, reverse=True)
+    top_five = sorted_listings[:5]
+    updated_seen = list(dict.fromkeys([*state.seen_listings, *[item.listing.listing_id for item in top_five]]))
+    return {
+        "ranked_listings": [_dump_model(item) for item in top_five],
+        "seen_listings": updated_seen,
+    }
+
+
 def presenter(state: BuyerPreferenceState | dict) -> dict:
     state = _as_state(state)
     if not state.ranked_listings:
-        return {"tour_intent_summary": ""}
+        return {"tour_intent_summary": "", "tour_calendar_ics": ""}
 
     top = state.ranked_listings[0].listing
     return {
         "tour_intent_summary": (
             f"Tour request: {top.title}, {top.neighborhood}, "
             f"{top.bedrooms} BHK, INR {top.price / 10_000_000:.2f} Cr."
-        )
+        ),
+        "tour_calendar_ics": _build_tour_ics(top),
     }
 
 
@@ -142,14 +153,19 @@ def preference_updater(state: BuyerPreferenceState | dict) -> dict:
 
 def state_saver(state: BuyerPreferenceState | dict) -> dict:
     state = _as_state(state)
-    update = {
-        "last_updated": datetime.now(timezone.utc),
+    now = datetime.now(timezone.utc)
+    update: dict = {
+        "last_updated": now,
         "graph_action": "recommend",
     }
     if state.graph_action == "recommend":
-        update["session_count"] = state.session_count + 1
+        new_count = state.session_count + 1
+        update["session_count"] = new_count
         kpis = state.kpis.model_copy()
-        kpis.buyer_engagement_sessions = state.session_count + 1
+        if kpis.first_session_at is None:
+            kpis.first_session_at = now
+        elapsed_days = max(1.0, (now - kpis.first_session_at).total_seconds() / 86400.0)
+        kpis.buyer_engagement_sessions_per_week = round(new_count / (elapsed_days / 7.0), 2)
         update["kpis"] = _dump_model(kpis)
     return update
 
@@ -320,6 +336,37 @@ def _fair_price_note(listing: Listing) -> str:
     if delta_pct < -5:
         return f"Listed about {abs(delta_pct):.1f}% below comparable estimate."
     return "Listed close to comparable estimate."
+
+
+def _build_tour_ics(listing: Listing) -> str:
+    """Build a minimal iCalendar VEVENT for a property tour, importable into Google Calendar."""
+    now = datetime.now(timezone.utc)
+    tour_start = (now + timedelta(days=2)).replace(hour=10, minute=0, second=0, microsecond=0)
+    tour_end = tour_start + timedelta(hours=1)
+    fmt = "%Y%m%dT%H%M%SZ"
+    description = (
+        f"{listing.bedrooms} BHK, {listing.area_sqft} sqft, "
+        f"INR {listing.price / 10_000_000:.2f} Cr, "
+        f"{listing.neighborhood}, {listing.city}"
+    )
+    return "\r\n".join(
+        [
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            "PRODID:-//RealEstateFinder//Tour//EN",
+            "BEGIN:VEVENT",
+            f"UID:tour-{listing.listing_id}-{int(now.timestamp())}@realestatefinder",
+            f"DTSTAMP:{now.strftime(fmt)}",
+            f"DTSTART:{tour_start.strftime(fmt)}",
+            f"DTEND:{tour_end.strftime(fmt)}",
+            f"SUMMARY:Property tour - {listing.title}",
+            f"LOCATION:{listing.neighborhood}, {listing.city}",
+            f"DESCRIPTION:{description}",
+            "END:VEVENT",
+            "END:VCALENDAR",
+            "",
+        ]
+    )
 
 
 def _reconciled_weights(weights: dict[str, float], state: BuyerPreferenceState | None) -> tuple[dict[str, float], list[str]]:

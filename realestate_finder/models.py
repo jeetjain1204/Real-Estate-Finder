@@ -57,9 +57,10 @@ class KPIMetrics(BaseModel):
     preference_inference_accuracy: float | None = None
     sessions_to_first_strong_yes: int | None = None
     listings_filtered_out_pct: float = 0.0
-    buyer_engagement_sessions: int = 0
+    buyer_engagement_sessions_per_week: float = 0.0
     cold_start_listing_count: int = 0
     final_stated_preferences: list[str] = Field(default_factory=list)
+    first_session_at: datetime | None = None
 
 
 class CoupleProfile(BaseModel):
@@ -96,6 +97,7 @@ class BuyerPreferenceState(BaseModel):
     kpis: KPIMetrics = Field(default_factory=KPIMetrics)
     couple_profile: CoupleProfile = Field(default_factory=CoupleProfile)
     tour_intent_summary: str = ""
+    tour_calendar_ics: str = ""
 
 
 def clamp_weights(weights: dict[str, float]) -> dict[str, float]:

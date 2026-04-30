@@ -58,8 +58,11 @@ def main() -> None:
     state = save_feedback(graph, BUYER_ID, feedback)
     print_state(f"After feedback  — session {session_number}", state)
 
-    print(f"\n→ Restart this script to continue from session {state.session_count}.")
-    print("  The weights above will persist in data/checkpoints.sqlite.\n")
+    print(f"\n>> Restart this script to continue from session {state.session_count}.")
+    print("   The weights above will persist in data/checkpoints.sqlite.\n")
+    if state.learning_error:
+        print(f"   Note: {state.learning_error}")
+        print("   Set GOOGLE_API_KEY in .env to enable preference drift across sessions.\n")
 
 
 if __name__ == "__main__":
