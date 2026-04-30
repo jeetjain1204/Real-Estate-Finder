@@ -1,0 +1,61 @@
+listing_id,title,neighborhood,price_lakhs,bedrooms,area_sqft,property_age_years,amenities,description,floor_level,natural_light_level
+BLR-R-001,Bright corner flat near 100 Feet Road,Indiranagar,195,2,1280,4,gym|covered parking|power backup|balcony,South-east corner unit with floor-to-ceiling windows and morning light in both bedrooms.,4,4
+BLR-R-002,Well-connected flat close to metro,Indiranagar,178,2,1150,6,covered parking|security|lift,Mid-floor apartment in a quiet lane with moderate natural light and good commute access.,3,3
+BLR-R-003,Spacious 3 BHK with private terrace,Indiranagar,235,3,1680,3,gym|pool|covered parking|balcony|smart home,Top-floor flat with a private terrace and excellent cross-ventilation all day.,5,4
+BLR-R-004,Affordable resale flat with parking,Indiranagar,165,2,1100,10,covered parking|security,Lower-floor older unit with adequate amenities and limited direct sunlight.,2,2
+BLR-R-005,New-launch premium residence,Indiranagar,248,3,1750,1,gym|pool|covered parking|ev charging|balcony,Brand-new boutique-tower apartment with premium finishes and abundant light.,4,4
+BLR-R-006,Quiet mid-rise near eateries,Indiranagar,188,2,1250,5,covered parking|balcony|gym,Well-maintained apartment in a tree-lined lane with a good-sized balcony.,3,3
+BLR-R-007,Modern flat in gated community,Indiranagar,205,2,1320,2,gym|covered parking|coworking|balcony,Recently built apartment with high ceilings and a sun-facing balcony.,4,4
+BLR-R-008,Garden-facing home with big windows,Koramangala,182,2,1260,2,garden|gym|covered parking|coworking lounge,Bright garden-facing home with full-height windows and a short walk to offices.,3,4
+BLR-R-009,Practical apartment near tech hub,Koramangala,170,2,1190,7,covered parking|security|power backup,Mid-floor apartment with reliable power backup and security; average natural light.,2,3
+BLR-R-010,Amenity-rich community flat,Koramangala,228,3,1720,4,pool|gym|covered parking|clubhouse|balcony,Large gated-community apartment with resort-style amenities and a breezy balcony.,4,3
+BLR-R-011,Smart new apartment near cafes,Koramangala,194,2,1300,1,gym|covered parking|smart locks|balcony,Freshly built flat with smart-home features and a south-facing sun balcony.,4,4
+BLR-R-012,Budget starter in prime location,Koramangala,168,2,1140,9,security|lift|metro access,Ground-floor older unit in a prime area; convenient but limited sunlight and no covered parking.,1,1
+BLR-R-013,3 BHK with balcony and gym,Koramangala,215,3,1650,5,gym|covered parking|power backup|balcony,Well-designed 3 BHK with a large balcony and reliable backup power.,3,3
+BLR-R-014,Ultra-premium sky apartment,Sadashivanagar,262,3,1900,1,pool|gym|covered parking|sky deck|ev charging,Top-floor apartment with a private sky deck and city views; the brightest unit in the complex.,5,4
+BLR-R-015,Prestigious enclave flat,Sadashivanagar,212,2,1350,6,covered parking|gym|balcony,Well-designed mid-floor apartment in a prestigious neighbourhood with a sunny balcony.,3,3
+BLR-R-016,3 BHK with study and terrace,Sadashivanagar,245,3,1850,2,gym|pool|covered parking|concierge|terrace,Penthouse-style residence with panoramic views and abundant natural light.,5,4
+BLR-R-017,Classic resale home with parking,Sadashivanagar,198,2,1280,8,covered parking|security|power backup,Older resale unit in a mature neighbourhood with practical layout and moderate light.,2,2
+BLR-R-018,Old-Bengaluru home near park,Malleswaram,172,2,1380,11,tree-lined street|covered parking|security,Low-rise flat in a mature neighbourhood with filtered light through the tree canopy.,2,3
+BLR-R-019,Well-maintained apartment near market,Malleswaram,165,2,1240,8,covered parking|security|garden,Calm apartment with a small garden and good neighbourhood feel.,2,3
+BLR-R-020,3 BHK in gated community,Malleswaram,220,3,1690,6,pool|gym|covered parking|balcony,Well-maintained gated complex with good amenities and a breezy third-floor balcony.,3,3
+BLR-R-021,Compact flat in established area,Malleswaram,155,2,1150,14,covered parking|security,Budget-friendly older unit in a well-connected area; limited windows and natural light.,1,2
+BLR-R-022,Metro-connected resale flat,Jayanagar,152,2,1190,13,covered parking|security|metro access,Older resale apartment well-connected to metro; adequate natural light.,2,2
+BLR-R-023,Modern apartment near NIMHANS,Jayanagar,163,2,1260,7,covered parking|balcony|gym,Mid-floor apartment with a south-facing balcony and decent afternoon light.,3,3
+BLR-R-024,Premium community with clubhouse,Jayanagar,195,3,1580,5,gym|pool|covered parking|clubhouse,Amenity-rich community with a spacious clubhouse; partial natural light.,3,3
+BLR-R-025,Older flat near bus stand,Jayanagar,145,2,1120,12,security|lift,Ground-floor older unit in a convenient location; not much direct sunlight; no covered parking.,1,1
+BLR-R-026,New-build with EV charging,HSR Layout,185,2,1250,1,covered parking|ev charging|security|balcony,Freshly constructed apartment with modern amenities and a bright balcony.,3,4
+BLR-R-027,Practical family apartment,HSR Layout,168,2,1180,5,gym|covered parking|power backup,Mid-floor apartment in a well-maintained complex; practical and comfortable.,3,3
+BLR-R-028,3 BHK with panoramic views,HSR Layout,218,3,1620,3,pool|gym|covered parking|clubhouse|balcony,Spacious high-floor flat with open views and a sun-facing balcony.,4,3
+BLR-R-029,Affordable resale near schools,HSR Layout,158,2,1100,9,covered parking|security,Lower-floor older apartment close to schools and markets; average natural light.,2,2
+BLR-R-030,Large family flat with facilities,Whitefield,165,3,1760,9,clubhouse|pool|gym|kids play area|covered parking,Spacious gated-community apartment near tech parks; lower floor with moderate light.,2,2
+BLR-R-031,Bright mid-rise with balcony,Whitefield,132,2,1280,6,gym|covered parking|power backup|balcony,Well-lit mid-floor apartment with a large balcony and afternoon sun.,3,3
+BLR-R-032,Economy flat near IT parks,Whitefield,118,2,1190,11,covered parking|security,Older economy apartment close to tech parks; practical but limited daylight.,1,2
+BLR-R-033,4th-floor flat with city view,Whitefield,148,3,1680,4,pool|gym|covered parking|clubhouse|balcony,4th-floor apartment with open city views and a good-sized balcony facing east.,4,3
+BLR-R-034,Smart home near Whitefield metro,Whitefield,138,2,1350,3,gym|covered parking|smart locks|balcony,3-year-old apartment with smart-home features and a sun-facing balcony.,3,4
+BLR-R-035,New launch with pool,Hebbal,158,2,1220,1,pool|gym|smart locks|covered parking,Brand-new apartment with modern amenities and an airport-road address.,3,3
+BLR-R-036,Practical flat near outer ring road,Hebbal,142,2,1150,7,covered parking|security|power backup,Mid-rise apartment with reliable power and security; average natural light.,2,2
+BLR-R-037,Sky apartment with deck,Hebbal,188,3,1620,4,pool|gym|covered parking|sky deck|balcony,Upper-floor flat with a rooftop deck and excellent sunlight from all sides.,5,4
+BLR-R-038,2 BHK with balcony and gym,Hebbal,162,2,1280,2,gym|covered parking|balcony|ev charging,2-year-old apartment with a large east-facing balcony.,3,3
+BLR-R-039,Skyline-view apartment,Rajajinagar,198,3,1620,5,sky deck|pool|gym|covered parking|concierge,Upper-floor apartment with skyline views and a large sky deck.,4,4
+BLR-R-040,Mid-rise close to market,Rajajinagar,162,2,1220,7,gym|covered parking|power backup,Mid-floor apartment near traditional markets with reliable power and gym access.,3,3
+BLR-R-041,Budget resale in prime area,Rajajinagar,148,2,1140,11,covered parking|security,Older unit in a prime location; practical for first-time buyers; limited light.,2,2
+BLR-R-042,Resort-style gated community,Sarjapur Road,148,3,1610,7,pool|tennis court|gym|supermarket|covered parking,Amenity-rich campus with practical layout; commute can be long to central areas.,2,2
+BLR-R-043,Bright apartment near IT corridor,Sarjapur Road,118,2,1220,5,gym|covered parking|balcony,Mid-floor apartment with a sun-facing balcony close to IT companies.,3,3
+BLR-R-044,Economy flat near outer ring road,Sarjapur Road,112,2,1180,9,covered parking|security,Older apartment close to the outer ring road; practical but not bright.,1,2
+BLR-R-045,3 BHK with pool and clubhouse,Sarjapur Road,165,3,1750,3,pool|gym|covered parking|clubhouse|balcony,3-year-old community apartment with a 4th-floor balcony and good afternoon light.,4,3
+BLR-R-046,Peaceful apartment near parks,JP Nagar,155,2,1340,5,gym|covered parking|garden|balcony,Mid-floor apartment with a garden view and a south-facing balcony.,3,3
+BLR-R-047,Well-connected mid-rise,JP Nagar,142,2,1190,9,covered parking|security|lift,Older apartment close to shops and transport links; decent layout and light.,2,2
+BLR-R-048,Spacious 3 BHK with clubhouse,JP Nagar,188,3,1680,3,pool|gym|covered parking|clubhouse,3-year-old spacious community apartment with a 3rd-floor position.,3,3
+BLR-R-049,Practical flat near Silk Board,Marathahalli,118,2,1250,6,gym|covered parking|power backup,Mid-floor apartment with gym and power backup close to Marathahalli bridge.,3,3
+BLR-R-050,Economy flat in developing area,Marathahalli,105,2,1150,10,covered parking|security,Older apartment in a developing corridor; practical and affordable.,2,2
+BLR-R-051,3 BHK with community amenities,Marathahalli,138,3,1580,4,pool|gym|covered parking|clubhouse,4-year-old community apartment with pool and gym; 2nd-floor position.,2,2
+BLR-R-052,Budget flat near tech parks,Electronic City,89,2,1060,5,security|covered parking,Efficient apartment close to Electronic City Phase 1 tech parks; average daylight.,2,2
+BLR-R-053,Bright new apartment with balcony,Electronic City,92,2,1140,3,gym|covered parking|balcony,3-year-old apartment with a gym and a south-facing balcony at mid-floor.,3,3
+BLR-R-054,Compact starter home,Electronic City,82,2,1020,8,security|lift,Ground-floor older unit in a budget community; limited sunlight; no covered parking.,1,1
+BLR-R-055,3 BHK for families near school,Electronic City,108,3,1480,4,gym|pool|covered parking|kids play area,4-year-old community apartment with kid-friendly amenities; moderate light.,2,2
+BLR-R-056,Tree-shaded flat near temple,Banashankari,132,2,1280,7,covered parking|security|garden,Mid-floor flat in a calm residential lane with a garden view.,2,3
+BLR-R-057,Older apartment near bus stand,Banashankari,118,2,1190,10,covered parking|security,Older apartment close to bus stand; practical and affordable; average light.,1,2
+BLR-R-058,3 BHK with pool in growing area,Banashankari,162,3,1620,5,gym|pool|covered parking|clubhouse,3rd-floor community apartment with pool and gym; good afternoon sun.,3,3
+BLR-R-059,Affordable flat in south Bengaluru,Kanakapura Road,88,2,1150,4,covered parking|security|gym,4-year-old apartment with gym in the southern growth corridor.,2,2
+BLR-R-060,Budget starter with parking,Kanakapura Road,78,2,1050,7,covered parking|security,Economy flat in an affordable corridor; practical for first-time buyers.,1,2

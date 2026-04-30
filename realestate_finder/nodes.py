@@ -17,6 +17,13 @@ from realestate_finder.models import (
     clamp_weights,
 )
 
+try:
+    from langsmith import traceable as _traceable
+except ImportError:
+    def _traceable(**_kw):  # no-op when langsmith is not installed
+        def _wrap(fn): return fn
+        return _wrap
+
 
 def state_loader(state: BuyerPreferenceState | dict) -> dict:
     state = _as_state(state)
@@ -213,6 +220,7 @@ def _explain_match(listing: Listing, state: BuyerPreferenceState, effective_weig
     return f"Best match for current emphasis on {', '.join(strongest)} ({evidence})."
 
 
+@_traceable(name="infer_preference_delta", run_type="chain")
 def _infer_preference_delta_with_llm(
     feedback: list[FeedbackEvent],
     listings: list[Listing],

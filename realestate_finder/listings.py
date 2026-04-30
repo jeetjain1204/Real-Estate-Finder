@@ -1,8 +1,141 @@
+"""Bengaluru real estate listings for RealEstateFinder.
+
+Data provenance
+---------------
+Primary dataset: data/bengaluru_listings.csv
+  60 realistic synthetic listings hand-crafted for the UGDSAI 29 End-Term
+  Examination (Group 10, 2026). Covers 15 Bengaluru neighbourhoods with
+  price ranges representative of the 2024-26 flat market.
+
+Reference sources consulted for market structure (no automated scraping):
+  - 99acres.com        — neighbourhood price bands, amenity conventions
+  - MagicBricks.com    — listing format and feature prevalence
+  - Kaggle: "Bengaluru House Data" (Rounak Banik, 2019) — neighbourhood taxonomy
+
+Feature scores are computed deterministically from raw CSV fields using
+_compute_feature_scores(); see the function docstring for the full formula.
+
+Fallback
+  If data/bengaluru_listings.csv is absent the module falls back to
+  SYNTHETIC_LISTINGS (36 hand-crafted + algorithmically generated entries) so
+  the app and tests remain fully functional without the data file.
+
+Citation: Synthetic dataset — RealEstateFinder (UGDSAI 29, Group 10, 2026).
+"""
 from __future__ import annotations
+
+import csv
+from pathlib import Path
 
 from realestate_finder.models import Listing
 
+# ---------------------------------------------------------------------------
+# CSV data source — primary
+# ---------------------------------------------------------------------------
+_CSV_PATH = Path(__file__).parent.parent / "data" / "bengaluru_listings.csv"
 
+_NEIGHBORHOOD_LOCATION_SCORES: dict[str, float] = {
+    "Indiranagar": 0.95,
+    "Koramangala": 0.93,
+    "Sadashivanagar": 0.92,
+    "Malleswaram": 0.90,
+    "HSR Layout": 0.88,
+    "Jayanagar": 0.84,
+    "Rajajinagar": 0.83,
+    "JP Nagar": 0.80,
+    "Hebbal": 0.76,
+    "Whitefield": 0.74,
+    "Banashankari": 0.70,
+    "Sarjapur Road": 0.64,
+    "Marathahalli": 0.62,
+    "Kanakapura Road": 0.52,
+    "Electronic City": 0.48,
+}
+
+_LIGHT_BASE: dict[int, float] = {1: 0.25, 2: 0.55, 3: 0.78, 4: 0.95}
+_FLOOR_BONUS: dict[int, float] = {1: -0.05, 2: 0.0, 3: 0.05, 4: 0.08, 5: 0.12}
+_CSV_MIN_PRICE_LAKHS = 78
+_CSV_MAX_PRICE_LAKHS = 262
+
+
+def _compute_feature_scores(
+    price_lakhs: int,
+    area_sqft: int,
+    neighborhood: str,
+    property_age_years: int,
+    amenities: list[str],
+    natural_light_level: int,
+    floor_level: int,
+) -> dict[str, float]:
+    """Deterministic feature scores (0-1) derived from raw CSV fields.
+
+    price    : 1 - (price - min_price) / (max_price - min_price)  [cheapest=1.0]
+    size     : sqft / 2000, clamped to [0.3, 1.0]
+    location : neighbourhood prestige lookup; unknown neighbourhoods default 0.65
+    light    : natural_light_level base + floor_level bonus, clamped to [0.1, 1.0]
+    age      : 1 - property_age_years / 20, clamped to [0.1, 1.0]
+    amenities: 0.3 + n_amenities * 0.12, clamped to 1.0
+    """
+    price_score = max(0.0, min(1.0,
+        1.0 - (price_lakhs - _CSV_MIN_PRICE_LAKHS) / (_CSV_MAX_PRICE_LAKHS - _CSV_MIN_PRICE_LAKHS)
+    ))
+    size_score = max(0.3, min(1.0, area_sqft / 2000))
+    location_score = _NEIGHBORHOOD_LOCATION_SCORES.get(neighborhood, 0.65)
+    light_base = _LIGHT_BASE.get(natural_light_level, 0.55)
+    floor_bonus = _FLOOR_BONUS.get(floor_level, 0.0)
+    light_score = max(0.1, min(1.0, light_base + floor_bonus))
+    age_score = max(0.1, min(1.0, 1.0 - property_age_years / 20.0))
+    amenities_score = min(1.0, 0.3 + len(amenities) * 0.12)
+    return {
+        "price": round(price_score, 3),
+        "size": round(size_score, 3),
+        "location": round(location_score, 3),
+        "light": round(light_score, 3),
+        "age": round(age_score, 3),
+        "amenities": round(amenities_score, 3),
+    }
+
+
+def _load_csv_listings() -> list[Listing]:
+    """Parse data/bengaluru_listings.csv and return a list of Listing objects."""
+    listings: list[Listing] = []
+    with _CSV_PATH.open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            amenities = [a.strip() for a in row["amenities"].split("|") if a.strip()]
+            price_lakhs = int(row["price_lakhs"])
+            area_sqft = int(row["area_sqft"])
+            age = int(row["property_age_years"])
+            light = int(row["natural_light_level"])
+            floor = int(row["floor_level"])
+            listings.append(
+                Listing(
+                    listing_id=row["listing_id"],
+                    title=row["title"],
+                    city="Bengaluru",
+                    neighborhood=row["neighborhood"],
+                    price=price_lakhs * 100_000,
+                    bedrooms=int(row["bedrooms"]),
+                    area_sqft=area_sqft,
+                    property_age_years=age,
+                    amenities=amenities,
+                    description=row["description"],
+                    feature_scores=_compute_feature_scores(
+                        price_lakhs=price_lakhs,
+                        area_sqft=area_sqft,
+                        neighborhood=row["neighborhood"],
+                        property_age_years=age,
+                        amenities=amenities,
+                        natural_light_level=light,
+                        floor_level=floor,
+                    ),
+                )
+            )
+    return listings
+
+
+# ---------------------------------------------------------------------------
+# Legacy synthetic listings — fallback when CSV is absent
+# ---------------------------------------------------------------------------
 BASE_LISTINGS: list[Listing] = [
     Listing(
         listing_id="BLR-001",
@@ -231,19 +364,35 @@ def _generated_listing_variants() -> list[Listing]:
 SYNTHETIC_LISTINGS: list[Listing] = [*BASE_LISTINGS, *_generated_listing_variants()]
 
 
+# ---------------------------------------------------------------------------
+# Active listing pool — CSV preferred, synthetic fallback
+# ---------------------------------------------------------------------------
+def _get_all_listings() -> list[Listing]:
+    if _CSV_PATH.exists():
+        try:
+            loaded = _load_csv_listings()
+            if loaded:
+                return loaded
+        except Exception:
+            pass
+    return list(SYNTHETIC_LISTINGS)
+
+
+ALL_LISTINGS: list[Listing] = _get_all_listings()
+
+
 def fetch_broad_listings(city: str, budget: int, seen_listing_ids: list[str], cooldown: int = 10) -> list[Listing]:
     """Return broad listing candidates, preferring homes outside the recent seen cooldown."""
     broad_budget_limit = int(budget * 1.25)
     city_matches = [
         listing
-        for listing in SYNTHETIC_LISTINGS
+        for listing in ALL_LISTINGS
         if listing.city.lower() == city.lower()
         and listing.price <= broad_budget_limit
     ]
     if not city_matches:
-        city_matches = [listing for listing in SYNTHETIC_LISTINGS if listing.price <= broad_budget_limit]
+        city_matches = [listing for listing in ALL_LISTINGS if listing.price <= broad_budget_limit]
 
     recent_seen = set(seen_listing_ids[-cooldown:])
     preferred = [listing for listing in city_matches if listing.listing_id not in recent_seen]
     return preferred if len(preferred) >= 5 else city_matches
-

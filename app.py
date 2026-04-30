@@ -6,6 +6,8 @@ import pandas as pd
 import streamlit as st
 
 from realestate_finder.graph import (
+    CHECKPOINTER_TYPE,
+    LANGSMITH_ACTIVE,
     checkpoint_path,
     compile_graph,
     load_checkpoint_state,
@@ -158,6 +160,9 @@ graph = get_graph()
 with st.sidebar:
     st.header("Buyer")
     buyer_id = st.text_input("Thread", value="demo-buyer", label_visibility="collapsed")
+    if LANGSMITH_ACTIVE:
+        project = os.getenv("LANGCHAIN_PROJECT", "realestate-finder")
+        st.caption(f"LangSmith tracing active — project **{project}**")
     with st.expander("Demo", expanded=False):
         if st.button("Fresh start", use_container_width=True):
             reset_buyer_checkpoint(buyer_id)
@@ -216,7 +221,7 @@ st.markdown(
 
 metric_cols = st.columns(4)
 metrics = [
-    ("Session", str(state.session_count), "SQLite checkpoint"),
+    ("Session", str(state.session_count), f"{CHECKPOINTER_TYPE.upper()} checkpoint"),
     ("Shortlist", f"{len(state.ranked_listings[:5])}", "Current homes"),
     ("Feedback", str(len(state.feedback_log)), "Saved reactions"),
     (
