@@ -14,9 +14,6 @@ class BuyerProfile(BaseModel):
     city: str = Field(default="Bengaluru")
     min_bedrooms: int = 2
     required_amenities: list[str] = Field(default_factory=lambda: ["covered parking"])
-    hard_requirements: list[str] = Field(
-        default_factory=lambda: ["2+ bedrooms", "covered parking", "safe neighborhood"]
-    )
 
 
 class Listing(BaseModel):
@@ -101,7 +98,8 @@ class BuyerPreferenceState(BaseModel):
     tour_intent_summary: str = ""
 
 
-def normalise_weights(weights: dict[str, float]) -> dict[str, float]:
+def clamp_weights(weights: dict[str, float]) -> dict[str, float]:
+    """Clamp each weight to [0.1, 3.0] so no dimension is silenced or dominates entirely."""
     return {
         dimension: round(max(0.1, min(3.0, weights.get(dimension, 1.0))), 3)
         for dimension in PREFERENCE_DIMENSIONS

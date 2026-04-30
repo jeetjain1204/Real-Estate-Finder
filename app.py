@@ -282,8 +282,9 @@ with right:
 
     st.subheader("Profile")
     st.caption(f"{state.buyer_profile.city} | INR {state.buyer_profile.budget / 10_000_000:.2f} Cr")
-    for requirement in state.buyer_profile.hard_requirements:
-        st.write(f"- {requirement}")
+    st.write(f"- Min {state.buyer_profile.min_bedrooms} bedrooms (enforced)")
+    for amenity in state.buyer_profile.required_amenities:
+        st.write(f"- {amenity} (enforced)")
 
     with st.expander("Log"):
         st.write(f"Feedback: **{len(state.feedback_log)}**")
@@ -295,24 +296,42 @@ with right:
 
     with st.expander("Couple mode"):
         enabled = st.checkbox("Blend two buyer profiles", value=state.couple_profile.enabled)
-        partner_a_light = st.slider("Buyer A light", 0.1, 3.0, state.couple_profile.partner_a_weights.get("light", state.preference_weights.get("light", 1.0)), 0.1)
-        partner_b_light = st.slider("Buyer B light", 0.1, 3.0, state.couple_profile.partner_b_weights.get("light", state.preference_weights.get("light", 1.0)), 0.1)
-        partner_a_price = st.slider("Buyer A price", 0.1, 3.0, state.couple_profile.partner_a_weights.get("price", state.preference_weights.get("price", 1.0)), 0.1)
-        partner_b_price = st.slider("Buyer B price", 0.1, 3.0, state.couple_profile.partner_b_weights.get("price", state.preference_weights.get("price", 1.0)), 0.1)
+        st.caption("Set each partner's weight per dimension (1.0 = neutral, 3.0 = very important).")
+        couple_a_weights: dict[str, float] = {}
+        couple_b_weights: dict[str, float] = {}
+        for dim in PREFERENCE_DIMENSIONS:
+            col_a, col_b = st.columns(2)
+            default_weight = state.preference_weights.get(dim, 1.0)
+            with col_a:
+                couple_a_weights[dim] = st.slider(
+                    f"A: {dim}",
+                    0.1, 3.0,
+                    float(state.couple_profile.partner_a_weights.get(dim, default_weight)),
+                    0.1,
+                    key=f"couple_a_{dim}",
+                )
+            with col_b:
+                couple_b_weights[dim] = st.slider(
+                    f"B: {dim}",
+                    0.1, 3.0,
+                    float(state.couple_profile.partner_b_weights.get(dim, default_weight)),
+                    0.1,
+                    key=f"couple_b_{dim}",
+                )
         if st.button("Save couple profile", use_container_width=True):
+            conflicts = [
+                f"{dim}: A {couple_a_weights[dim]:.1f} vs B {couple_b_weights[dim]:.1f}"
+                for dim in PREFERENCE_DIMENSIONS
+                if abs(couple_a_weights[dim] - couple_b_weights[dim]) >= 0.7
+            ]
             state.couple_profile.enabled = enabled
-            state.couple_profile.partner_a_weights = {**state.preference_weights, "light": partner_a_light, "price": partner_a_price}
-            state.couple_profile.partner_b_weights = {**state.preference_weights, "light": partner_b_light, "price": partner_b_price}
-            conflicts = []
-            if abs(partner_a_light - partner_b_light) >= 0.7:
-                conflicts.append(f"light conflict: {partner_a_light:.1f} vs {partner_b_light:.1f}")
-            if abs(partner_a_price - partner_b_price) >= 0.7:
-                conflicts.append(f"price conflict: {partner_a_price:.1f} vs {partner_b_price:.1f}")
+            state.couple_profile.partner_a_weights = couple_a_weights
+            state.couple_profile.partner_b_weights = couple_b_weights
             state.couple_profile.conflict_notes = conflicts
             state = update_buyer_state(graph, buyer_id, state)
             st.rerun()
         for note in state.couple_profile.conflict_notes:
-            st.caption(note)
+            st.caption(f"⚠ {note}")
 
     with st.expander("Checkpoint"):
         st.write(f"Buyer thread id: `{buyer_id}`")

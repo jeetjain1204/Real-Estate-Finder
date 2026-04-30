@@ -14,7 +14,7 @@ from realestate_finder.models import (
     ListingScore,
     PREFERENCE_DIMENSIONS,
     PreferenceDelta,
-    normalise_weights,
+    clamp_weights,
 )
 
 
@@ -29,9 +29,6 @@ def state_loader(state: BuyerPreferenceState | dict) -> dict:
 
 def listing_fetcher(state: BuyerPreferenceState | dict) -> dict:
     state = _as_state(state)
-    if state.graph_action == "feedback":
-        return {"current_listings": [_dump_model(listing) for listing in state.current_listings]}
-
     listings = fetch_broad_listings(
         city=state.buyer_profile.city,
         budget=state.buyer_profile.budget,
@@ -45,9 +42,6 @@ def listing_fetcher(state: BuyerPreferenceState | dict) -> dict:
 
 def matcher(state: BuyerPreferenceState | dict) -> dict:
     state = _as_state(state)
-    if state.graph_action == "feedback" and state.ranked_listings:
-        return {"ranked_listings": [_dump_model(item) for item in state.ranked_listings]}
-
     eligible = []
     for listing in state.current_listings:
         notes = _hard_requirement_notes(listing, state)
@@ -63,14 +57,12 @@ def matcher(state: BuyerPreferenceState | dict) -> dict:
 
 def ranker(state: BuyerPreferenceState | dict) -> dict:
     state = _as_state(state)
-    if state.graph_action == "feedback":
-        return {"ranked_listings": [_dump_model(item) for item in state.ranked_listings[:5]]}
-
+    effective_weights, conflict_notes = _reconciled_weights(state.preference_weights, state)
     ranked = [
         ListingScore(
             listing=listing,
-            score=_score_listing(listing, state.preference_weights, state),
-            explanation=_explain_match(listing, state),
+            score=_score_listing(listing, effective_weights),
+            explanation=_explain_match(listing, state, effective_weights),
             eligibility_notes=[],
             fair_price_estimate=_estimate_fair_price(listing),
             fair_price_note=_fair_price_note(listing),
@@ -80,7 +72,11 @@ def ranker(state: BuyerPreferenceState | dict) -> dict:
     ranked.sort(key=lambda item: item.score, reverse=True)
     top_five = ranked[:5]
     updated_seen = list(dict.fromkeys([*state.seen_listings, *[item.listing.listing_id for item in top_five]]))
-    return {"ranked_listings": [_dump_model(item) for item in top_five], "seen_listings": updated_seen}
+    result: dict = {"ranked_listings": [_dump_model(item) for item in top_five], "seen_listings": updated_seen}
+    if conflict_notes != state.couple_profile.conflict_notes:
+        updated_couple = state.couple_profile.model_copy(update={"conflict_notes": conflict_notes})
+        result["couple_profile"] = _dump_model(updated_couple)
+    return result
 
 
 def presenter(state: BuyerPreferenceState | dict) -> dict:
@@ -135,7 +131,7 @@ def preference_updater(state: BuyerPreferenceState | dict) -> dict:
     kpis = _update_feedback_kpis(state)
 
     return {
-        "preference_weights": normalise_weights(updated_weights),
+        "preference_weights": clamp_weights(updated_weights),
         "feedback_log": [_dump_model(event) for event in [*state.feedback_log, *state.incoming_feedback]],
         "incoming_feedback": [],
         "last_update_rationale": delta.rationale,
@@ -173,30 +169,25 @@ def _hard_requirement_notes(listing: Listing, state: BuyerPreferenceState) -> li
     profile = state.buyer_profile
     if listing.bedrooms < profile.min_bedrooms:
         notes.append(f"below {profile.min_bedrooms} bedrooms")
-    missing_amenities = [
-        amenity for amenity in profile.required_amenities if amenity.lower() not in {item.lower() for item in listing.amenities}
-    ]
-    if missing_amenities:
-        notes.append(f"missing {', '.join(missing_amenities)}")
-    if listing.price > int(profile.budget * 1.25):
-        notes.append("outside broad budget band")
+    amenity_set = {item.lower() for item in listing.amenities}
+    missing = [a for a in profile.required_amenities if a.lower() not in amenity_set]
+    if missing:
+        notes.append(f"missing {', '.join(missing)}")
     return notes
 
 
-def _score_listing(listing: Listing, weights: dict[str, float], state: BuyerPreferenceState | None = None) -> float:
+def _score_listing(listing: Listing, weights: dict[str, float]) -> float:
     weighted_total = 0.0
     weight_sum = 0.0
-    effective_weights = _reconciled_weights(weights, state) if state else weights
     for dimension in PREFERENCE_DIMENSIONS:
-        weight = max(0.1, effective_weights.get(dimension, 1.0))
+        weight = max(0.1, weights.get(dimension, 1.0))
         weighted_total += weight * listing.feature_scores.get(dimension, 0.5)
         weight_sum += weight
     return round(weighted_total / weight_sum, 3)
 
 
-def _explain_match(listing: Listing, state: BuyerPreferenceState) -> str:
-    weights = _reconciled_weights(state.preference_weights, state)
-    strongest = sorted(PREFERENCE_DIMENSIONS, key=lambda dim: weights.get(dim, 1.0), reverse=True)[:2]
+def _explain_match(listing: Listing, state: BuyerPreferenceState, effective_weights: dict[str, float]) -> str:
+    strongest = sorted(PREFERENCE_DIMENSIONS, key=lambda dim: effective_weights.get(dim, 1.0), reverse=True)[:2]
     history = _history_reason(state.feedback_log)
     evidence = ", ".join(
         f"{dimension} {listing.feature_scores.get(dimension, 0.5):.0%}" for dimension in strongest
@@ -295,10 +286,8 @@ def _history_reason(feedback_log: list[FeedbackEvent]) -> str:
 def _update_feedback_kpis(state: BuyerPreferenceState):
     kpis = state.kpis.model_copy()
     if kpis.sessions_to_first_strong_yes is None:
-        for event in state.incoming_feedback:
-            if event.rating == "up" and "strong yes" in event.comment.lower():
-                kpis.sessions_to_first_strong_yes = max(1, state.session_count)
-                break
+        if any(event.rating == "up" for event in state.incoming_feedback):
+            kpis.sessions_to_first_strong_yes = max(1, state.session_count)
     if kpis.final_stated_preferences:
         learned = set(sorted(PREFERENCE_DIMENSIONS, key=lambda dim: state.preference_weights.get(dim, 1.0), reverse=True)[:3])
         stated = set(kpis.final_stated_preferences)
@@ -333,9 +322,9 @@ def _fair_price_note(listing: Listing) -> str:
     return "Listed close to comparable estimate."
 
 
-def _reconciled_weights(weights: dict[str, float], state: BuyerPreferenceState | None) -> dict[str, float]:
+def _reconciled_weights(weights: dict[str, float], state: BuyerPreferenceState | None) -> tuple[dict[str, float], list[str]]:
     if not state or not state.couple_profile.enabled:
-        return weights
+        return weights, []
     profile = state.couple_profile
     combined = {}
     notes = []
@@ -345,6 +334,5 @@ def _reconciled_weights(weights: dict[str, float], state: BuyerPreferenceState |
         combined[dimension] = round((a_weight + b_weight) / 2, 3)
         if abs(a_weight - b_weight) >= 0.7:
             notes.append(f"{dimension}: buyer A {a_weight:.1f}, buyer B {b_weight:.1f}")
-    state.couple_profile.conflict_notes = notes
-    return combined
+    return combined, notes
 

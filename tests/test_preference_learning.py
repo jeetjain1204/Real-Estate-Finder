@@ -21,7 +21,9 @@ def test_matcher_prioritises_light_when_light_weight_is_high():
     matched_state = BuyerPreferenceState.model_validate({**state.model_dump(mode="python"), **matched})
     result = ranker(matched_state)
     updated = BuyerPreferenceState.model_validate({**matched_state.model_dump(mode="python"), **result})
-    assert updated.ranked_listings[0].listing.feature_scores["light"] >= 0.95
+    top_light = updated.ranked_listings[0].listing.feature_scores["light"]
+    best_available_light = max(listing.feature_scores["light"] for listing in matched_state.current_listings)
+    assert top_light == best_available_light
 
 
 def test_ranker_returns_top_five_and_marks_seen():
