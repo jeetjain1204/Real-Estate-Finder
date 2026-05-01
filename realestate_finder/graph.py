@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, StateGraph
 
-from realestate_finder.models import BuyerPreferenceState, json_safe_state
+from realestate_finder.models import BuyerPreferenceState, FeedbackEvent, json_safe_state
 from realestate_finder.nodes import (
     feedback_receiver,
     listing_fetcher,
@@ -94,7 +94,9 @@ def run_recommendation_session(graph, buyer_id: str, state: BuyerPreferenceState
     return BuyerPreferenceState.model_validate(result)
 
 
-def save_feedback(graph, buyer_id: str, feedback) -> BuyerPreferenceState:
+def save_feedback(
+    graph, buyer_id: str, feedback: list[FeedbackEvent]
+) -> BuyerPreferenceState:
     current = load_checkpoint_state(graph, buyer_id)
     current.graph_action = "feedback"
     current.incoming_feedback = feedback

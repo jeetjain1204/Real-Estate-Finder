@@ -1,23 +1,20 @@
 # RealEstateFinder Business Memo
 
 ## Problem
-Home buyers rarely know their true priorities on day one. They begin with filters like budget, city, and bedrooms, then discover softer preferences after touring homes: natural light, commute tolerance, amenity value, layout, age, or neighborhood feel. RealEstateFinder turns that iterative process into persistent preference learning across sessions.
+Home search is not a one-shot filtering problem. Buyers often begin with obvious constraints such as city, budget, bedrooms, and required amenities, but their real trade-offs emerge only after seeing options. A buyer may start by optimizing for size, then discover that natural light, newer construction, commute, or neighborhood quality matters more. Traditional search tools treat every session as mostly independent, so the buyer has to repeat context and the recommendations do not improve enough from prior feedback.
+
+RealEstateFinder addresses this by using a LangGraph agent with persistent buyer memory. Each recommendation session loads the buyer's saved state, fetches a broad listing set, filters hard requirements, ranks the top homes using learned preference weights, and explains why each listing fits. Feedback sessions capture thumbs-up or thumbs-down comments, infer how preferences should shift, and save that updated state for the next visit.
 
 ## User Persona
-The primary user is an urban first-time or move-up buyer searching over several weeks. They have a fixed budget and broad location preference, but their trade-offs evolve as they compare real homes. The secondary user is a buyer agent who wants better shortlists and clearer explanations for why each home is being recommended.
+The primary persona is an urban home buyer in Bengaluru who is actively searching over multiple weeks. They have a real budget, minimum bedroom requirement, and must-have amenities such as covered parking, but they are still learning their softer preferences through comparison. They want fewer irrelevant listings, clearer explanations, and a search experience that remembers what they disliked last time.
 
-## Agent Impact
-The agent maintains a durable buyer memory using LangGraph checkpointing. Recommendation sessions retrieve a broad listing pool, enforce hard requirements, rank the best five homes, and explain matches using prior feedback. Feedback sessions validate buyer comments, use Gemini to infer preference deltas, update KPIs, and checkpoint the new state for the next visit.
+A secondary persona is a buyer-side real-estate advisor. They use the agent to produce sharper shortlists, explain recommendation logic to the buyer, and track how the buyer's priorities evolve across sessions.
 
-## KPIs
-- Preference inference accuracy: compare learned weights against the buyer's stated final priorities after the search.
-- Sessions to first strong yes: fewer sessions means the agent learns useful trade-offs faster.
-- Listings filtered out: percentage reduction from broad candidates after hard requirement matching.
-- Buyer engagement: repeat sessions per week and feedback completion rate.
+## KPIs The Agent Impacts
+- **Preference inference accuracy:** Measures how closely the learned preference weights match the buyer's final stated priorities after several feedback cycles.
+- **Sessions to first strong yes:** Tracks how many recommendation sessions it takes before the buyer finds a listing they would seriously consider touring.
+- **Listings filtered out percentage:** Shows how effectively the agent removes broad-market listings that fail hard requirements before ranking.
+- **Buyer engagement sessions:** Counts repeat sessions per buyer thread, indicating whether persistent memory makes the search useful enough to continue.
 
-## Risks And Edge Cases
-- Sparse feedback can overfit. The app applies small bounded deltas and clamps weights.
-- Repeated listings create demo fatigue. The graph tracks `seen_listings` and uses a cooldown strategy instead of exhausting the pool.
-- LLM output can be malformed. Structured output is requested; if Gemini fails, feedback is saved but weights are not changed.
-- Preference drift can conflict with hard requirements. Hard requirements stay in `BuyerProfile`; learned weights only affect soft ranking.
+Together, these KPIs show whether the agent is learning buyer intent, reducing search noise, and improving the quality of recommendations over time.
 

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import os
+import html
 
 import pandas as pd
 import streamlit as st
 
+from realestate_finder.listings import available_listings
 from realestate_finder.graph import (
     checkpoint_path,
     compile_graph,
@@ -16,9 +17,12 @@ from realestate_finder.graph import (
 )
 from realestate_finder.models import FeedbackEvent, PREFERENCE_DIMENSIONS
 from realestate_finder.ui_helpers import (
-    QUICK_FEEDBACK_COMMENTS,
+    buyer_selector_options,
     preference_drift_rows,
     preference_summary_sentence,
+    quick_feedback_comment_for,
+    quick_feedback_options_for,
+    repair_preset_buyer_profile_if_stale,
 )
 
 
@@ -153,22 +157,35 @@ def get_graph():
     return compile_graph()
 
 
+def load_state_synced_to_preset(graph, buyer_id: str):
+    state = load_checkpoint_state(graph, buyer_id)
+    if repair_preset_buyer_profile_if_stale(state, buyer_id):
+        state = update_buyer_state(graph, buyer_id, state)
+    return state
+
+
 graph = get_graph()
+buyer_options = buyer_selector_options()
 
 with st.sidebar:
     st.header("Buyer")
-    buyer_id = st.text_input("Thread", value="demo-buyer", label_visibility="collapsed")
+    buyer_id = st.selectbox(
+        "Buyer profile",
+        options=list(buyer_options),
+        format_func=lambda value: buyer_options[value],
+    )
+    st.caption(f"Memory thread: `{buyer_id}`")
     with st.expander("Demo", expanded=False):
-        if st.button("Fresh start", use_container_width=True):
+        if st.button("Fresh start", width="stretch"):
             reset_buyer_checkpoint(buyer_id)
             st.cache_resource.clear()
             st.rerun()
-        if st.button("Run session", use_container_width=True):
-            current_state = load_checkpoint_state(graph, buyer_id)
+        if st.button("Run session", width="stretch"):
+            current_state = load_state_synced_to_preset(graph, buyer_id)
             current_state = run_recommendation_session(graph, buyer_id, current_state)
             st.rerun()
-        if st.button("Apply too-dark feedback", use_container_width=True):
-            current_state = load_checkpoint_state(graph, buyer_id)
+        if st.button("Apply too-dark feedback", width="stretch"):
+            current_state = load_state_synced_to_preset(graph, buyer_id)
             if current_state.ranked_listings:
                 feedback = [
                     FeedbackEvent(
@@ -180,8 +197,8 @@ with st.sidebar:
                 ]
                 save_feedback(graph, buyer_id, feedback)
                 st.rerun()
-        if st.button("Apply strong yes", use_container_width=True):
-            current_state = load_checkpoint_state(graph, buyer_id)
+        if st.button("Apply strong yes", width="stretch"):
+            current_state = load_state_synced_to_preset(graph, buyer_id)
             if current_state.ranked_listings:
                 feedback = [
                     FeedbackEvent(
@@ -193,15 +210,17 @@ with st.sidebar:
                 ]
                 save_feedback(graph, buyer_id, feedback)
                 st.rerun()
-    if st.button("Reset buyer", use_container_width=True):
+    if st.button("Reset buyer", width="stretch"):
         reset_buyer_checkpoint(buyer_id)
         st.cache_resource.clear()
         st.rerun()
 
-state = load_checkpoint_state(graph, buyer_id)
+state = load_state_synced_to_preset(graph, buyer_id)
 
 drift_rows = preference_drift_rows(state)
 strongest_drift = drift_rows[0] if drift_rows else {"Dimension": "None", "Change": 0.0}
+_listings_source = available_listings()
+listing_count = len(_listings_source)
 
 st.markdown(
     """
@@ -216,8 +235,8 @@ st.markdown(
 
 metric_cols = st.columns(4)
 metrics = [
-    ("Session", str(state.session_count), "SQLite checkpoint"),
-    ("Shortlist", f"{len(state.ranked_listings[:5])}", "Current homes"),
+    ("Dataset", f"{listing_count:,}", "Homes in active source"),
+    ("Shortlist", f"{len(state.ranked_listings[:5])}", "Current 5 homes"),
     ("Feedback", str(len(state.feedback_log)), "Saved reactions"),
     (
         "Strongest drift",
@@ -241,11 +260,15 @@ for column, (label, value, note) in zip(metric_cols, metrics):
 st.write("")
 action_col, proof_col = st.columns([1, 2])
 with action_col:
-    if st.button("Next session", type="primary", use_container_width=True):
+    action_label = "Show first 5 homes" if not state.ranked_listings else "Show next 5 homes"
+    if st.button(action_label, type="primary", width="stretch"):
         state = run_recommendation_session(graph, buyer_id, state)
         st.rerun()
 with proof_col:
-    st.caption(f"`{buyer_id}` | updated `{state.last_updated.strftime('%d %b, %I:%M %p')}`")
+    st.caption(
+        f"{buyer_options[buyer_id]} | `{buyer_id}` | "
+        f"{state.session_count} saved shortlists | updated `{state.last_updated.strftime('%d %b, %I:%M %p')}`"
+    )
 
 left, right = st.columns([1.75, 1], gap="large")
 
@@ -261,7 +284,7 @@ with right:
     drift_df = pd.DataFrame(preference_drift_rows(state))
     with st.expander("Drift"):
         st.bar_chart(drift_df.set_index("Dimension")["Change"])
-        st.dataframe(drift_df, hide_index=True, use_container_width=True)
+        st.dataframe(drift_df, hide_index=True, width="stretch")
 
     with st.expander("KPIs", expanded=False):
         st.write(f"Preference inference accuracy: **{state.kpis.preference_inference_accuracy if state.kpis.preference_inference_accuracy is not None else 'Not scored'}**")
@@ -273,7 +296,7 @@ with right:
             options=list(PREFERENCE_DIMENSIONS),
             default=state.kpis.final_stated_preferences,
         )
-        if st.button("Score preference inference", use_container_width=True):
+        if st.button("Score preference inference", width="stretch"):
             state.kpis.final_stated_preferences = stated
             learned = set(sorted(PREFERENCE_DIMENSIONS, key=lambda dim: state.preference_weights.get(dim, 1.0), reverse=True)[:3])
             state.kpis.preference_inference_accuracy = round((len(learned & set(stated)) / len(stated)) * 100, 2) if stated else None
@@ -299,7 +322,7 @@ with right:
         partner_b_light = st.slider("Buyer B light", 0.1, 3.0, state.couple_profile.partner_b_weights.get("light", state.preference_weights.get("light", 1.0)), 0.1)
         partner_a_price = st.slider("Buyer A price", 0.1, 3.0, state.couple_profile.partner_a_weights.get("price", state.preference_weights.get("price", 1.0)), 0.1)
         partner_b_price = st.slider("Buyer B price", 0.1, 3.0, state.couple_profile.partner_b_weights.get("price", state.preference_weights.get("price", 1.0)), 0.1)
-        if st.button("Save couple profile", use_container_width=True):
+        if st.button("Save couple profile", width="stretch"):
             state.couple_profile.enabled = enabled
             state.couple_profile.partner_a_weights = {**state.preference_weights, "light": partner_a_light, "price": partner_a_price}
             state.couple_profile.partner_b_weights = {**state.preference_weights, "light": partner_b_light, "price": partner_b_price}
@@ -332,18 +355,27 @@ with left:
             with st.container(border=True):
                 header_left, header_right = st.columns([4.4, 1])
                 with header_left:
-                    st.markdown(f"<div class='listing-title'>{index}. {listing.title}</div>", unsafe_allow_html=True)
                     st.markdown(
-                        f"<div class='muted'>{listing.neighborhood} | {listing.bedrooms} BHK | "
+                        f"<div class='listing-title'>{index}. {html.escape(listing.title)}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(
+                        f"<div class='muted'>{html.escape(listing.neighborhood)} | {listing.bedrooms} BHK | "
                         f"{listing.area_sqft} sqft | INR {price_cr:.2f} Cr</div>",
                         unsafe_allow_html=True,
                     )
                 with header_right:
                     st.markdown(f"<span class='score-tag'>{item.score:.2f} match</span>", unsafe_allow_html=True)
 
-                st.markdown(f"<div class='why-box'>{item.explanation}</div>", unsafe_allow_html=True)
                 st.markdown(
-                    " ".join(f"<span class='amenity-tag'>{amenity}</span>" for amenity in listing.amenities),
+                    f"<div class='why-box'>{html.escape(item.explanation)}</div>",
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    " ".join(
+                        f"<span class='amenity-tag'>{html.escape(amenity)}</span>"
+                        for amenity in listing.amenities
+                    ),
                     unsafe_allow_html=True,
                 )
                 if item.fair_price_estimate:
@@ -352,27 +384,32 @@ with left:
                     )
 
                 with st.expander("Feedback"):
+                    # Reaction must stay outside st.form: form widgets do not rerun the script on change,
+                    # so Reason would stay disabled until Save unless Like/Pass triggers a rerun here.
+                    reaction_col, _ = st.columns([1.1, 2.9])
+                    with reaction_col:
+                        rating = st.radio(
+                            "Reaction",
+                            options=["up", "down"],
+                            format_func=lambda value: {
+                                "up": "Like",
+                                "down": "Pass",
+                            }[value],
+                            index=None,
+                            horizontal=False,
+                            key=f"rating_{listing.listing_id}_{state.session_count}",
+                        )
                     with st.form(f"feedback_{listing.listing_id}_{state.session_count}", clear_on_submit=False):
-                        feedback_cols = st.columns([1.1, 1.25, 1.65])
+                        feedback_cols = st.columns([1.25, 1.65])
                         with feedback_cols[0]:
-                            rating = st.radio(
-                                "Reaction",
-                                options=["not rated", "up", "down"],
-                                format_func=lambda value: {
-                                    "not rated": "Skip",
-                                    "up": "Like",
-                                    "down": "Pass",
-                                }[value],
-                                horizontal=False,
-                                key=f"rating_{listing.listing_id}_{state.session_count}",
-                            )
-                        with feedback_cols[1]:
+                            quick_reason_options = quick_feedback_options_for(rating)
                             quick_reason = st.selectbox(
                                 "Reason",
-                                options=["Custom", *QUICK_FEEDBACK_COMMENTS.keys()],
-                                key=f"quick_{listing.listing_id}_{state.session_count}",
+                                options=quick_reason_options or ["Select reaction first"],
+                                disabled=rating is None,
+                                key=f"quick_{listing.listing_id}_{state.session_count}_{rating or 'none'}",
                             )
-                        with feedback_cols[2]:
+                        with feedback_cols[1]:
                             comment = st.text_area(
                                 "Note",
                                 placeholder="Optional",
@@ -383,8 +420,8 @@ with left:
                         if submitted:
                             selected_comment = comment.strip()
                             if not selected_comment and quick_reason != "Custom":
-                                selected_comment = QUICK_FEEDBACK_COMMENTS[quick_reason]
-                            if rating == "not rated":
+                                selected_comment = quick_feedback_comment_for(rating, quick_reason)
+                            if rating is None:
                                 st.error("Pick Like or Pass.")
                             elif not selected_comment:
                                 st.error("Pick a reason or add a note.")

@@ -9,6 +9,15 @@ from pydantic import BaseModel, Field
 PREFERENCE_DIMENSIONS = ("price", "size", "location", "light", "age", "amenities")
 
 
+class BuyerMemoryParameters(BaseModel):
+    """How strongly this buyer updates preferences from feedback and how much history informs copy."""
+
+    feedback_history_window: int = Field(default=5, ge=1, le=40)
+    preference_delta_cap: float = Field(default=0.35, ge=0.05, le=0.5)
+    weight_floor: float = Field(default=0.1, ge=0.05, le=0.5)
+    weight_ceiling: float = Field(default=3.0, ge=1.0, le=5.0)
+
+
 class BuyerProfile(BaseModel):
     budget: int = Field(default=18_000_000, description="Maximum purchase budget in INR")
     city: str = Field(default="Bengaluru")
@@ -17,6 +26,7 @@ class BuyerProfile(BaseModel):
     hard_requirements: list[str] = Field(
         default_factory=lambda: ["2+ bedrooms", "covered parking", "safe neighborhood"]
     )
+    memory: BuyerMemoryParameters = Field(default_factory=BuyerMemoryParameters)
 
 
 class Listing(BaseModel):
@@ -101,9 +111,14 @@ class BuyerPreferenceState(BaseModel):
     tour_intent_summary: str = ""
 
 
-def normalise_weights(weights: dict[str, float]) -> dict[str, float]:
+def normalise_weights(
+    weights: dict[str, float],
+    *,
+    floor: float = 0.1,
+    ceiling: float = 3.0,
+) -> dict[str, float]:
     return {
-        dimension: round(max(0.1, min(3.0, weights.get(dimension, 1.0))), 3)
+        dimension: round(max(floor, min(ceiling, weights.get(dimension, 1.0))), 3)
         for dimension in PREFERENCE_DIMENSIONS
     }
 

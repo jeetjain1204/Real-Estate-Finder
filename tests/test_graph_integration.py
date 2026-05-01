@@ -32,15 +32,9 @@ def test_recommendation_path_returns_five_listings_for_four_sessions(tmp_path):
 
 
 def test_hard_requirements_remove_ineligible_listings():
-    state = BuyerPreferenceState(current_listings=[])
-    state.current_listings = [
-        listing.model_copy(update={"listing_id": f"copy-{index}"})
-        for index, listing in enumerate([])
-    ]
-
     from realestate_finder.listings import SYNTHETIC_LISTINGS
 
-    state.current_listings = SYNTHETIC_LISTINGS[:12]
+    state = BuyerPreferenceState(current_listings=SYNTHETIC_LISTINGS[:12])
     matched = BuyerPreferenceState.model_validate({**state.model_dump(mode="python"), **matcher(state)})
 
     assert all(listing.bedrooms >= state.buyer_profile.min_bedrooms for listing in matched.current_listings)

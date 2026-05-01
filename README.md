@@ -108,7 +108,13 @@ REALESTATE_CHECKPOINT_DB=data/checkpoints.sqlite
 ## Run Streamlit
 
 ```bash
-streamlit run app.py
+python -m streamlit run app.py
+```
+
+Run Streamlit through the activated project environment. On Windows, you can also call the venv directly:
+
+```bash
+.venv\Scripts\python -m streamlit run app.py
 ```
 
 On Windows, if the page stays on Streamlit's skeleton loader with a WebSocket error for `ws://localhost:8501/_stcore/stream`, open the IPv4 URL instead:
@@ -143,9 +149,18 @@ pytest
 
 The test suite covers initial state shape, scoring behavior, ranking, seen-listing tracking, LLM-required feedback behavior, conditional graph routing, hard requirement filtering, 3+ session listing availability, history-based explanations, fair-price estimates, datetime checkpoint round-tripping, and SQLite restart persistence.
 
-## Data Source
+## Data Sources
 
-This project uses synthetic Bengaluru listings in `realestate_finder/listings.py`. The data is generated for the exam demo and does not represent real properties. This avoids scraping risk and keeps the checkpointing and preference-learning pattern reproducible.
+Primary listing data comes from the public Bengaluru house price CSV mirrored by DPhi/AiPlanet:
+
+- **Source name**: Bengaluru House Price Data
+  - URL: <https://github.com/dphi-official/Datasets/blob/master/Bengaluru_House_Data.csv>
+  - Local file: `data/bengaluru_house_data.csv`
+  - Data used: Bengaluru location, BHK count, total square feet, price, area type, availability, society, bathroom count, and balcony count.
+  - Accessed on: 30 Apr 2026
+  - Notes: Prices are provided in lakhs and converted to INR in `realestate_finder/listings.py`. The dataset does not include explicit natural-light, property-age, or amenity fields, so the app derives demo feature scores from balcony count, area, availability, area type, and society presence.
+
+The synthetic listings in `realestate_finder/listings.py` remain as an offline fallback if the CSV file is unavailable.
 
 ## Deliverables
 
