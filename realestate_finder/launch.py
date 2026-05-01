@@ -10,7 +10,7 @@ from pathlib import Path
 
 def main() -> None:
     root = Path(__file__).resolve().parent.parent
-    app_py = root / "app.py"
+    app_py = root / "streamlit_app.py"
     port = os.environ.get("PORT", "8501")
     cmd = [
         sys.executable,

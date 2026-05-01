@@ -268,7 +268,7 @@ def _infer_preference_delta_with_llm(
                 raise RuntimeError(
                     "Gemini preference parsing failed because `langchain-google-genai` is not installed "
                     "in the Python environment running Streamlit. Activate the project venv and run "
-                    "`python -m streamlit run app.py`, or install dependencies with "
+                    "`python -m streamlit run streamlit_app.py`, or install dependencies with "
                     "`python -m pip install -r requirements.txt`."
                 ) from exc
             raise

@@ -22,8 +22,10 @@ dependencies = [
     "psycopg[binary]>=3.1.18",
 ]
 
+# Named `realestate-streamlit` on purpose: Vercel treats setuptools/script names or files named `app.py`
+# as HTTP entrypoints and expects ASGI/WSGI `app`, which Streamlit is not.
 [project.scripts]
-app = "realestate_finder.launch:main"
+realestate-streamlit = "realestate_finder.launch:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

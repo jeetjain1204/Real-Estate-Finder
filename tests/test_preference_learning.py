@@ -141,7 +141,7 @@ def test_feedback_reports_missing_gemini_dependency_with_setup_guidance(monkeypa
     result = preference_updater(state)
 
     assert "langchain-google-genai" in result["learning_error"]
-    assert "python -m streamlit run app.py" in result["learning_error"]
+    assert "python -m streamlit run streamlit_app.py" in result["learning_error"]
 
 
 def test_feedback_updates_weights_with_injected_llm_delta(monkeypatch):

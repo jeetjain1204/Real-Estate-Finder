@@ -341,13 +341,13 @@ LANGSMITH_PROJECT=realestate-finder
 ## 🚀 Run the App
 
 ```bash
-python -m streamlit run app.py
+python -m streamlit run streamlit_app.py
 ```
 
 Run Streamlit through the activated project environment. On Windows, you can also call the venv directly:
 
 ```bash
-.venv\Scripts\python -m streamlit run app.py
+.venv\Scripts\python -m streamlit run streamlit_app.py
 ```
 
 Open **http://127.0.0.1:8501** in your browser.
@@ -381,7 +381,7 @@ python scripts/draw_graph.py
 | 2 | Expand a listing → choose **Pass** → reason "Too dark" → Save | Feedback saved, learning_error shown if no API key |
 | 3 | With API key set, repeat for 2–3 dark listings | Weights updating in **Memory** panel |
 | 4 | **Stop Streamlit** (Ctrl-C in terminal) | Show terminal — process killed |
-| 5 | **Restart Streamlit** (`streamlit run app.py`) | Same buyer id → same weights loaded from SQLite |
+| 5 | **Restart Streamlit** (`streamlit run streamlit_app.py`) | Same buyer id → same weights loaded from SQLite |
 | 6 | Click **Next session** | Session counter = 2; `light` weight higher; brighter homes surface |
 | 7 | Show **Memory → Drift** panel | Bar chart shows `light` drifted up |
 | 8 | Click **Next session** again | Session 3 — further refinement |
@@ -414,7 +414,7 @@ git push -u origin main
 ### Step 3 — Connect to Streamlit Cloud
 
 1. Go to [share.streamlit.io](https://share.streamlit.io) → **New app**
-2. Select your GitHub repo, branch `main`, main file `app.py`
+2. Select your GitHub repo, branch `main`, main file `streamlit_app.py`
 3. Click **Advanced settings** → **Secrets**
 4. Paste the contents of `.streamlit/secrets.toml.example` and fill in your keys:
 
@@ -565,7 +565,7 @@ Fixes applied:
 
 ```
 Real-Estate-Finder/
-├── app.py                         # Streamlit UI — buyer session, feedback, KPIs
+├── streamlit_app.py               # Streamlit UI — buyer session, feedback, KPIs
 ├── requirements.txt               # All dependencies incl. langsmith, psycopg, postgres
 ├── .env.example                   # Safe template — copy to .env and fill keys
 ├── .gitignore                     # .env, .venv, data/*.sqlite excluded
@@ -612,7 +612,7 @@ Real-Estate-Finder/
 | Member | Role |
 |---|---|
 | **Jeet Marlecha** | Graph architecture, LangGraph checkpointing (`graph.py`, `nodes.py`) |
-| **Tanmay Agarwal** | Streamlit UI, demo video, LangSmith integration (`app.py`) |
+| **Tanmay Agarwal** | Streamlit UI, demo video, LangSmith integration (`streamlit_app.py`) |
 | **Lakshya Goel** | LLM prompt engineering, feedback evaluation, test suite |
 | **Ansh** | README, business memo, presentation deck, KPI design |
 
