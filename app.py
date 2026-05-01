@@ -7,6 +7,8 @@ import streamlit as st
 
 from realestate_finder.listings import available_listings
 from realestate_finder.graph import (
+    CHECKPOINTER_TYPE,
+    LANGSMITH_ACTIVE,
     checkpoint_path,
     compile_graph,
     load_checkpoint_state,
@@ -290,7 +292,7 @@ with right:
         st.write(f"Preference inference accuracy: **{state.kpis.preference_inference_accuracy if state.kpis.preference_inference_accuracy is not None else 'Not scored'}**")
         st.write(f"Sessions to first strong yes: **{state.kpis.sessions_to_first_strong_yes or 'Pending'}**")
         st.write(f"Listings filtered out: **{state.kpis.listings_filtered_out_pct:.1f}%**")
-        st.write(f"Buyer engagement: **{state.kpis.buyer_engagement_sessions} sessions**")
+        st.write(f"Buyer engagement: **{state.kpis.buyer_engagement_sessions_per_week:.2f} sessions/week**")
         stated = st.multiselect(
             "Blind-test final priorities",
             options=list(PREFERENCE_DIMENSIONS),
@@ -305,8 +307,9 @@ with right:
 
     st.subheader("Profile")
     st.caption(f"{state.buyer_profile.city} | INR {state.buyer_profile.budget / 10_000_000:.2f} Cr")
-    for requirement in state.buyer_profile.hard_requirements:
-        st.write(f"- {requirement}")
+    st.write(f"- Min {state.buyer_profile.min_bedrooms} bedrooms (enforced)")
+    for amenity in state.buyer_profile.required_amenities:
+        st.write(f"- {amenity} (enforced)")
 
     with st.expander("Log"):
         st.write(f"Feedback: **{len(state.feedback_log)}**")
@@ -315,6 +318,14 @@ with right:
 
     with st.expander("Tour"):
         st.write(state.tour_intent_summary or "Run a session to generate a tour-ready summary.")
+        if state.tour_calendar_ics:
+            st.download_button(
+                "Add tour to Google Calendar (.ics)",
+                data=state.tour_calendar_ics,
+                file_name="property_tour.ics",
+                mime="text/calendar",
+                use_container_width=True,
+            )
 
     with st.expander("Couple mode"):
         enabled = st.checkbox("Blend two buyer profiles", value=state.couple_profile.enabled)
@@ -324,18 +335,13 @@ with right:
         partner_b_price = st.slider("Buyer B price", 0.1, 3.0, state.couple_profile.partner_b_weights.get("price", state.preference_weights.get("price", 1.0)), 0.1)
         if st.button("Save couple profile", width="stretch"):
             state.couple_profile.enabled = enabled
-            state.couple_profile.partner_a_weights = {**state.preference_weights, "light": partner_a_light, "price": partner_a_price}
-            state.couple_profile.partner_b_weights = {**state.preference_weights, "light": partner_b_light, "price": partner_b_price}
-            conflicts = []
-            if abs(partner_a_light - partner_b_light) >= 0.7:
-                conflicts.append(f"light conflict: {partner_a_light:.1f} vs {partner_b_light:.1f}")
-            if abs(partner_a_price - partner_b_price) >= 0.7:
-                conflicts.append(f"price conflict: {partner_a_price:.1f} vs {partner_b_price:.1f}")
+            state.couple_profile.partner_a_weights = couple_a_weights
+            state.couple_profile.partner_b_weights = couple_b_weights
             state.couple_profile.conflict_notes = conflicts
             state = update_buyer_state(graph, buyer_id, state)
             st.rerun()
         for note in state.couple_profile.conflict_notes:
-            st.caption(note)
+            st.caption(f"⚠ {note}")
 
     with st.expander("Checkpoint"):
         st.write(f"Buyer thread id: `{buyer_id}`")

@@ -12,7 +12,14 @@ from realestate_finder.models import (
     PreferenceDelta,
 )
 from realestate_finder import nodes
-from realestate_finder.nodes import matcher, preference_updater, ranker, state_saver
+from realestate_finder.nodes import (
+    _estimate_fair_price,
+    _fair_price_note,
+    matcher,
+    preference_updater,
+    ranker,
+    state_saver,
+)
 from realestate_finder.ui_helpers import buyer_profile_for, buyer_selector_options
 
 
@@ -40,13 +47,16 @@ def test_matcher_prioritises_light_when_light_weight_is_high():
     matched_state = BuyerPreferenceState.model_validate({**state.model_dump(mode="python"), **matched})
     result = ranker(matched_state)
     updated = BuyerPreferenceState.model_validate({**matched_state.model_dump(mode="python"), **result})
-    assert updated.ranked_listings[0].listing.feature_scores["light"] >= 0.95
+    top_light = updated.ranked_listings[0].listing.feature_scores["light"]
+    best_available_light = max(item.listing.feature_scores["light"] for item in matched_state.ranked_listings)
+    assert top_light == best_available_light
 
 
 def test_ranker_returns_top_five_and_marks_seen():
     state = BuyerPreferenceState(current_listings=SYNTHETIC_LISTINGS[:7])
-    result = ranker(state)
-    updated = BuyerPreferenceState.model_validate({**state.model_dump(mode="python"), **result})
+    matched = BuyerPreferenceState.model_validate({**state.model_dump(mode="python"), **matcher(state)})
+    result = ranker(matched)
+    updated = BuyerPreferenceState.model_validate({**matched.model_dump(mode="python"), **result})
     assert len(updated.ranked_listings) == 5
     assert len(result["seen_listings"]) == 5
 

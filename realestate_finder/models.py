@@ -70,9 +70,10 @@ class KPIMetrics(BaseModel):
     preference_inference_accuracy: float | None = None
     sessions_to_first_strong_yes: int | None = None
     listings_filtered_out_pct: float = 0.0
-    buyer_engagement_sessions: int = 0
+    buyer_engagement_sessions_per_week: float = 0.0
     cold_start_listing_count: int = 0
     final_stated_preferences: list[str] = Field(default_factory=list)
+    first_session_at: datetime | None = None
 
 
 class CoupleProfile(BaseModel):
@@ -109,6 +110,7 @@ class BuyerPreferenceState(BaseModel):
     kpis: KPIMetrics = Field(default_factory=KPIMetrics)
     couple_profile: CoupleProfile = Field(default_factory=CoupleProfile)
     tour_intent_summary: str = ""
+    tour_calendar_ics: str = ""
 
 
 def normalise_weights(
@@ -121,6 +123,11 @@ def normalise_weights(
         dimension: round(max(floor, min(ceiling, weights.get(dimension, 1.0))), 3)
         for dimension in PREFERENCE_DIMENSIONS
     }
+
+
+def clamp_weights(weights: dict[str, float]) -> dict[str, float]:
+    """Clamp each weight to [0.1, 3.0] so no dimension is silenced or dominates entirely."""
+    return normalise_weights(weights, floor=0.1, ceiling=3.0)
 
 
 def json_safe_state(state: BuyerPreferenceState) -> dict:

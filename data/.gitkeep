@@ -1,0 +1,3 @@
+# This file ensures the data/ directory is tracked in git.
+# SQLite checkpoint files (*.sqlite) are excluded by .gitignore.
+# The app creates data/checkpoints.sqlite automatically on first run.

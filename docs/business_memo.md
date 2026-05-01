@@ -1,20 +1,73 @@
-# RealEstateFinder Business Memo
+# Business Memo — RealEstateFinder
+**To:** Product Team, NestSage  
+**From:** Group 10 — UGDSAI 29  
+**Date:** May 2026  
+**Re:** AI Agent for Persistent Buyer Preference Learning
 
-## Problem
-Home search is not a one-shot filtering problem. Buyers often begin with obvious constraints such as city, budget, bedrooms, and required amenities, but their real trade-offs emerge only after seeing options. A buyer may start by optimizing for size, then discover that natural light, newer construction, commute, or neighborhood quality matters more. Traditional search tools treat every session as mostly independent, so the buyer has to repeat context and the recommendations do not improve enough from prior feedback.
+## Problem Statement
 
-RealEstateFinder addresses this by using a LangGraph agent with persistent buyer memory. Each recommendation session loads the buyer's saved state, fetches a broad listing set, filters hard requirements, ranks the top homes using learned preference weights, and explains why each listing fits. Feedback sessions capture thumbs-up or thumbs-down comments, infer how preferences should shift, and save that updated state for the next visit.
+Home buying is iterative. A buyer starts with "3 BHK, Bengaluru, ₹1.8 Cr" and discovers after several visits that natural light, construction age, or commute can matter more than raw square footage. **Today's property portals don't learn** — every session is a cold start with static filters. Buyers re-explain their preferences every visit, and advisors lose context between conversations.
+
+RealEstateFinder uses a LangGraph agent with persistent buyer memory: each session loads saved state, fetches candidates, enforces hard requirements, ranks with learned weights, and explains fits. Feedback updates weights for the next visit.
+
+---
 
 ## User Persona
-The primary persona is an urban home buyer in Bengaluru who is actively searching over multiple weeks. They have a real budget, minimum bedroom requirement, and must-have amenities such as covered parking, but they are still learning their softer preferences through comparison. They want fewer irrelevant listings, clearer explanations, and a search experience that remembers what they disliked last time.
 
-A secondary persona is a buyer-side real-estate advisor. They use the agent to produce sharper shortlists, explain recommendation logic to the buyer, and track how the buyer's priorities evolve across sessions.
+**Primary:** Urban first-time or move-up buyer, aged roughly 28–42, searching over several weeks with a fixed budget and evolving soft trade-offs. Discovers preferences by *seeing* homes, not only by filling forms.
 
-## KPIs The Agent Impacts
-- **Preference inference accuracy:** Measures how closely the learned preference weights match the buyer's final stated priorities after several feedback cycles.
-- **Sessions to first strong yes:** Tracks how many recommendation sessions it takes before the buyer finds a listing they would seriously consider touring.
-- **Listings filtered out percentage:** Shows how effectively the agent removes broad-market listings that fail hard requirements before ranking.
-- **Buyer engagement sessions:** Counts repeat sessions per buyer thread, indicating whether persistent memory makes the search useful enough to continue.
+**Secondary:** Buyer's agent who wants sharper shortlists, explainable recommendation logic, and a record of how priorities drift — useful for client trust and compliance.
 
-Together, these KPIs show whether the agent is learning buyer intent, reducing search noise, and improving the quality of recommendations over time.
+---
 
+## Agent Capabilities
+
+RealEstateFinder uses LangGraph's `SqliteSaver` to maintain a durable buyer preference state across sessions. Each session:
+
+1. **Loads** the buyer's checkpointed state (preference weights, feedback history, seen listings)
+2. **Fetches** broad listing candidates matching city and budget
+3. **Scores and ranks** listings against learned preference weights across 6 dimensions
+4. **Presents** the top 5 with match explanations and fair-price estimates
+5. **Captures** thumbs-up / thumbs-down feedback with comments
+6. **Updates** preference weights via Gemini structured output
+7. **Saves** the updated state to SQLite for the next session
+
+Hard requirements (minimum bedrooms, required amenities, budget) are enforced before soft ranking and cannot be overridden by preference learning.
+
+---
+
+## KPIs and Impact
+
+| KPI | Baseline (portal) | Agent target | Measurement |
+|---|---|---|---|
+| **Sessions to first "strong yes"** | 8–12 sessions | 3–5 sessions | Recorded when first `rating="up"` received |
+| **Preference inference accuracy** | N/A (no learning) | > 70% | Blind test: compare learned top-3 dims vs buyer's stated final priorities |
+| **Listings filtered from cold-start pool** | 0% | 30–50% | `filtered_count / total_candidates` after preference drift |
+| **Buyer engagement** | 1.2 sessions/week | 2.5+ sessions/week | `session_count / elapsed_weeks` per buyer thread |
+
+---
+
+## Risks and Mitigations
+
+| Risk | Mitigation |
+|---|---|
+| **Sparse feedback overfits** | Bounded deltas `[-0.35, 0.35]` per Gemini call; lifetime clamp `[0.1, 3.0]` per dimension |
+| **Repeated listings cause demo fatigue** | `seen_listings` list + cooldown strategy (prefer last-10 unseen before recycling) |
+| **LLM output is malformed** | `with_structured_output(PreferenceDelta)` enforces schema; graceful fallback saves feedback without updating weights |
+| **Preference drift conflicts with hard requirements** | Hard requirements are in `BuyerProfile`, never in soft weights; they cannot be learned away |
+| **Couple with conflicting preferences** | Couple mode blends partner weights; conflicts (delta ≥ 0.7) are surfaced in the UI |
+
+---
+
+## Scope and Limitations
+
+This agent is scoped to a 14-day build window using synthetic Bengaluru listings. Production deployment would require:
+- Live listing ingestion (99acres / MagicBricks API or scraper with rate limiting)
+- Multi-device identity management (thread ID per device is insufficient for production)
+- Offline evaluation against real buyer stated preferences on a held-out set
+- Compliance review for data storage of buyer preference history
+
+---
+
+*Submitted as part of UGDSAI 29 End-Term Examination — Group 10*  
+*Jeet Marlecha · Tanmay Agarwal · Lakshya Goel · Ansh*

@@ -405,4 +405,3 @@ def fetch_broad_listings(city: str, budget: int, seen_listing_ids: list[str]) ->
     seen = set(seen_listing_ids)
     preferred = [listing for listing in city_matches if listing.listing_id not in seen]
     return preferred if len(preferred) >= 5 else city_matches
-
