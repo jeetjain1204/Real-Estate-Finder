@@ -333,6 +333,14 @@ with right:
         partner_b_light = st.slider("Buyer B light", 0.1, 3.0, state.couple_profile.partner_b_weights.get("light", state.preference_weights.get("light", 1.0)), 0.1)
         partner_a_price = st.slider("Buyer A price", 0.1, 3.0, state.couple_profile.partner_a_weights.get("price", state.preference_weights.get("price", 1.0)), 0.1)
         partner_b_price = st.slider("Buyer B price", 0.1, 3.0, state.couple_profile.partner_b_weights.get("price", state.preference_weights.get("price", 1.0)), 0.1)
+        base_weights = {dim: state.preference_weights.get(dim, 1.0) for dim in PREFERENCE_DIMENSIONS}
+        couple_a_weights = {**base_weights, "light": partner_a_light, "price": partner_a_price}
+        couple_b_weights = {**base_weights, "light": partner_b_light, "price": partner_b_price}
+        conflicts: list[str] = []
+        if abs(partner_a_light - partner_b_light) >= 0.7:
+            conflicts.append(f"light: buyer A {partner_a_light:.1f}, buyer B {partner_b_light:.1f}")
+        if abs(partner_a_price - partner_b_price) >= 0.7:
+            conflicts.append(f"price: buyer A {partner_a_price:.1f}, buyer B {partner_b_price:.1f}")
         if st.button("Save couple profile", width="stretch"):
             state.couple_profile.enabled = enabled
             state.couple_profile.partner_a_weights = couple_a_weights

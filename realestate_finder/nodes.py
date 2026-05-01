@@ -59,7 +59,22 @@ def matcher(state: BuyerPreferenceState | dict) -> dict:
 
     kpis = state.kpis.model_copy()
     total = len(state.current_listings)
+    filtered_count = total - len(eligible)
     kpis.listings_filtered_out_pct = round((filtered_count / total) * 100, 2) if total else 0.0
+
+    effective_weights, conflict_notes = _reconciled_weights(state.preference_weights, state)
+
+    scored = [
+        ListingScore(
+            listing=listing,
+            score=_score_listing(listing, state.preference_weights, state),
+            explanation=_explain_match(listing, state, effective_weights),
+            eligibility_notes=[],
+            fair_price_estimate=_estimate_fair_price(listing),
+            fair_price_note=_fair_price_note(listing),
+        )
+        for listing in eligible
+    ]
 
     result: dict = {
         "ranked_listings": [_dump_model(item) for item in scored],
@@ -74,6 +89,7 @@ def matcher(state: BuyerPreferenceState | dict) -> dict:
 def ranker(state: BuyerPreferenceState | dict) -> dict:
     """Sort the scored listings and pick the top 5."""
     state = _as_state(state)
+    effective_weights, _ = _reconciled_weights(state.preference_weights, state)
     seen_ids = set(state.seen_listings)
     listing_pool = [listing for listing in state.current_listings if listing.listing_id not in seen_ids]
     if len(listing_pool) < 5:
@@ -83,7 +99,7 @@ def ranker(state: BuyerPreferenceState | dict) -> dict:
         ListingScore(
             listing=listing,
             score=_score_listing(listing, state.preference_weights, state),
-            explanation=_explain_match(listing, state),
+            explanation=_explain_match(listing, state, effective_weights),
             eligibility_notes=[],
             fair_price_estimate=_estimate_fair_price(listing),
             fair_price_note=_fair_price_note(listing),
@@ -207,6 +223,7 @@ def _hard_requirement_notes(listing: Listing, state: BuyerPreferenceState) -> li
 
 
 def _score_listing(listing: Listing, weights: dict[str, float], state: BuyerPreferenceState | None = None) -> float:
+    effective_weights, _ = _reconciled_weights(weights, state)
     weighted_total = 0.0
     weight_sum = 0.0
     for dimension in PREFERENCE_DIMENSIONS:
@@ -408,6 +425,7 @@ def _reconciled_weights(weights: dict[str, float], state: BuyerPreferenceState |
         return weights, []
     profile = state.couple_profile
     combined: dict[str, float] = {}
+    notes: list[str] = []
     for dimension in PREFERENCE_DIMENSIONS:
         a_weight = profile.partner_a_weights.get(dimension, weights.get(dimension, 1.0))
         b_weight = profile.partner_b_weights.get(dimension, weights.get(dimension, 1.0))
@@ -415,5 +433,4 @@ def _reconciled_weights(weights: dict[str, float], state: BuyerPreferenceState |
         if abs(a_weight - b_weight) >= 0.7:
             notes.append(f"{dimension}: buyer A {a_weight:.1f}, buyer B {b_weight:.1f}")
     return combined, notes
-    return combined
 
