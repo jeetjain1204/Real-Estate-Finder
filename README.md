@@ -413,7 +413,9 @@ git push -u origin main
 
 ### Step 3 — Connect to Streamlit Cloud
 
-1. Go to [share.streamlit.io](https://share.streamlit.io) → **New app**
+Step-by-step checklist (secrets, Python version, troubleshooting): **[STREAMLIT_CLOUD.md](STREAMLIT_CLOUD.md)**.
+
+1. Go to [share.streamlit.io](https://share.streamlit.io) → **Create app**
 2. Select your GitHub repo, branch `main`, main file `streamlit_app.py`
 3. Click **Advanced settings** → **Secrets**
 4. Paste the contents of `.streamlit/secrets.toml.example` and fill in your keys:
