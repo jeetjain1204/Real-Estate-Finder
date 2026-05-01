@@ -558,7 +558,7 @@ Fixes applied:
 | 7 | **requirements.txt** | `requirements.txt` | ✅ |
 | 8 | **All four team members** named with roles | See [Team](#-team) section | ✅ |
 
-> 📹 **Demo video link:** `[ADD LINK HERE BEFORE SUBMISSION]`  
+> 📹 **Demo video link:** `https://drive.google.com/file/d/10EfyG_jXf7t2eUPGYrDDw6FLqrfnTavj/view?usp=sharing`  
 > 🎞️ Content to cover: session 1 cold-start → downvote dark homes → **stop app** → **restart app** → session 2 (weights persist, brighter listings) → session 3 (drift visible in Memory panel)
 
 ---
